@@ -1,0 +1,151 @@
+// backend/src/app.ts - Start with this simplified version
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import dotenv from 'dotenv';
+
+import { PrismaClient } from '@prisma/client';
+import Redis from 'ioredis';
+
+// Load environment variables first
+dotenv.config();
+
+// Initialize services
+export const prisma = new PrismaClient();
+
+// Redis connection with error handling
+export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+  retryDelayOnFailover: 100,
+  enableReadyCheck: false,
+  maxRetriesPerRequest: null,
+});
+
+redis.on('error', (err) => {
+  console.log('Redis connection error:', err);
+});
+
+redis.on('connect', () => {
+  console.log('✅ Redis connected successfully');
+});
+
+const app = express();
+const server = createServer(app);
+
+// Initialize Socket.IO
+export const io = new SocketIOServer(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+// Basic middleware
+app.use(helmet({
+  crossOriginEmbedderPolicy: false, // Required for Monaco Editor
+}));
+
+app.use(compression());
+
+app.use(morgan('combined'));
+
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: { error: 'Too many requests from this IP' }
+});
+app.use('/api/', limiter);
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Test database connection
+app.get('/test-db', async (req, res) => {
+  try {
+    await prisma.$connect();
+    res.json({ database: 'Connected successfully' });
+  } catch (error) {
+    console.error('Database connection error:', error);
+    res.status(500).json({ 
+      database: 'Connection failed', 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Import routes (we'll add these step by step)
+// Commented out for now until we create them
+// import authRoutes from './routes/authRoutes';
+// import projectRoutes from './routes/projectRoutes';
+// import documentRoutes from './routes/documentRoutes';
+
+// API Routes (add these later)
+// app.use('/api/auth', authRoutes);
+// app.use('/api/projects', projectRoutes);
+// app.use('/api/documents', documentRoutes);
+
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('👤 User connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('👋 User disconnected:', socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 3001;
+
+// Start server
+server.listen(PORT, () => {
+  console.log('\n🚀 CodeCollab Backend Server Started!');
+  console.log(`📍 Server running on: http://localhost:${PORT}`);
+  console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`🗄️  Database test: http://localhost:${PORT}/test-db`);
+  console.log('\n✅ Ready for connections!\n');
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  await prisma.$disconnect();
+  await redis.quit();
+  server.close(() => {
+    console.log('Process terminated');
+  });
+});
+
+export default app;

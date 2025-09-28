@@ -1,6 +1,5 @@
-// backend/src/middleware/authMiddleware.ts
 import { Request, Response, NextFunction } from 'express';
-import { AuthService } from '../services/authService';
+import jwt from 'jsonwebtoken';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -9,7 +8,7 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
     
@@ -17,16 +16,31 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       return res.status(401).json({ error: 'Access token required' });
     }
 
-    const token = authHeader.substring(7);
-    const decoded = await AuthService.validateAccessToken(token);
-    req.user = decoded;
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ error: 'JWT secret not configured' });
+    }
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
+    
+    if (decoded.type !== 'access') {
+      return res.status(401).json({ error: 'Invalid token type' });
+    }
+
+    req.user = decoded;
     next();
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Invalid token';
-    if (errorMessage.includes('expired')) {
-      return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
+    // Fix: Proper error type handling
+    if (error instanceof Error) {
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ error: 'Token expired' });
+      }
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
     }
-    return res.status(401).json({ error: 'Invalid token' });
+    
+    return res.status(401).json({ error: 'Authentication failed' });
   }
 };

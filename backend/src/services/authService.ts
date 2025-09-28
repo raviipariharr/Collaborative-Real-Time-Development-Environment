@@ -1,4 +1,3 @@
-// backend/src/services/authService.ts
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
@@ -10,7 +9,7 @@ export interface GoogleTokenPayload {
   sub: string;
   email: string;
   name: string;
-  picture?: string | undefined; // Fix: Allow undefined
+  picture?: string;
 }
 
 export class AuthService {
@@ -34,10 +33,10 @@ export class AuthService {
         sub: payload.sub,
         email: payload.email!,
         name: payload.name!,
-        picture: payload.picture // This can be undefined
+        picture: payload.picture
       };
     } catch (error) {
-      console.error('Google token verification error:', error);
+      console.error('Google token verification failed:', error);
       throw new Error('Invalid Google token');
     }
   }
@@ -46,27 +45,30 @@ export class AuthService {
     const { sub: googleId, email, name, picture } = googleData;
 
     try {
+      // Check if user exists
       let user = await prisma.user.findUnique({
         where: { googleId }
       });
 
       if (!user) {
+        // Create new user - handle undefined avatar properly
         user = await prisma.user.create({
           data: {
             googleId,
             email,
             name,
-            avatar: picture || null
+            avatar: picture || null // Convert undefined to null
           }
         });
         console.log('✅ New user created:', user.email);
       } else {
+        // Update existing user - handle undefined avatar properly
         user = await prisma.user.update({
           where: { googleId },
           data: {
             email,
             name,
-            avatar: picture || null,
+            avatar: picture || null, // Convert undefined to null
             updatedAt: new Date()
           }
         });
@@ -75,7 +77,7 @@ export class AuthService {
 
       return user;
     } catch (error) {
-      console.error('Database error in createOrUpdateUser:', error);
+      console.error('Database operation failed:', error);
       throw new Error('Failed to create or update user');
     }
   }
@@ -103,7 +105,7 @@ export class AuthService {
   static async saveSession(userId: string, refreshToken: string) {
     try {
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
       await prisma.session.create({
         data: {
@@ -112,54 +114,11 @@ export class AuthService {
           expiresAt
         }
       });
+
+      console.log('✅ Session saved for user:', userId);
     } catch (error) {
-      console.error('Error saving session:', error);
+      console.error('Failed to save session:', error);
       throw new Error('Failed to save session');
-    }
-  }
-
-  static async validateAccessToken(token: string) {
-    try {
-      if (!process.env.JWT_SECRET) {
-        throw new Error('JWT secret not configured');
-      }
-
-      const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
-      if (decoded.type !== 'access') {
-        throw new Error('Invalid token type');
-      }
-      return decoded;
-    } catch (error) {
-      // Fix: Handle unknown error type
-      if (error instanceof Error && error.name === 'TokenExpiredError') {
-        throw new Error('Token expired');
-      }
-      throw new Error('Invalid or expired token');
-    }
-  }
-
-  static async refreshAccessToken(refreshToken: string) {
-    try {
-      if (!process.env.JWT_REFRESH_SECRET) {
-        throw new Error('JWT refresh secret not configured');
-      }
-
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET) as any;
-      
-      const session = await prisma.session.findUnique({
-        where: { token: refreshToken },
-        include: { user: true }
-      });
-
-      if (!session || session.expiresAt < new Date()) {
-        throw new Error('Invalid or expired refresh token');
-      }
-
-      const { accessToken } = this.generateTokens(session.userId);
-      return { accessToken, user: session.user };
-    } catch (error) {
-      console.error('Error refreshing token:', error);
-      throw new Error('Invalid refresh token');
     }
   }
 }

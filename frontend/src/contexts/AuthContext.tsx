@@ -1,5 +1,7 @@
-// frontend/src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import axios from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001/api';
 
 interface User {
   id: string;
@@ -25,7 +27,6 @@ type AuthAction =
   | { type: 'LOGIN_SUCCESS'; payload: { user: User; accessToken: string; refreshToken: string } }
   | { type: 'LOGIN_ERROR'; payload: string }
   | { type: 'LOGOUT' }
-  | { type: 'REFRESH_TOKEN'; payload: string }
   | { type: 'CLEAR_ERROR' };
 
 const initialState: AuthState = {
@@ -76,10 +77,6 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         error: null
       };
     
-    case 'REFRESH_TOKEN':
-      localStorage.setItem('accessToken', action.payload);
-      return { ...state, accessToken: action.payload };
-    
     case 'CLEAR_ERROR':
       return { ...state, error: null };
     
@@ -91,47 +88,37 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
 const AuthContext = createContext<{
   state: AuthState;
   login: (googleToken: string) => Promise<void>;
-  logout: () => void;
-  refreshToken: () => Promise<void>;
+  logout: () => Promise<void>;
   clearError: () => void;
 }>({
   state: initialState,
   login: async () => {},
-  logout: () => {},
-  refreshToken: async () => {},
+  logout: async () => {},
   clearError: () => {}
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Initialize auth state on app start
   useEffect(() => {
     const initAuth = async () => {
       dispatch({ type: 'INIT_START' });
       
       if (state.accessToken) {
         try {
-          // Try to get current user to validate token
-          const response = await fetch('http://localhost:3001/api/auth/me', {
-            headers: {
-              'Authorization': `Bearer ${state.accessToken}`
-            }
+          const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+            headers: { 'Authorization': `Bearer ${state.accessToken}` }
           });
           
-          if (response.ok) {
-            const user = await response.json();
+          if (response.data) {
             dispatch({
               type: 'LOGIN_SUCCESS',
               payload: {
-                user,
+                user: response.data,
                 accessToken: state.accessToken!,
                 refreshToken: state.refreshToken!
               }
             });
-          } else {
-            // Token is invalid, clear it
-            dispatch({ type: 'LOGOUT' });
           }
         } catch (error) {
           dispatch({ type: 'LOGOUT' });
@@ -144,78 +131,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!state.initialized) {
       initAuth();
     }
-  }, [state.accessToken, state.initialized]);
+  }, [state.accessToken, state.initialized, state.refreshToken]);
 
   const login = async (googleToken: string) => {
     try {
       dispatch({ type: 'LOGIN_START' });
       
-      const response = await fetch('http://localhost:3001/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: googleToken })
+      const response = await axios.post(`${API_BASE_URL}/auth/google`, {
+        token: googleToken
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Authentication failed');
+      if (response.data.success) {
+        dispatch({
+          type: 'LOGIN_SUCCESS',
+          payload: {
+            user: response.data.user,
+            accessToken: response.data.accessToken,
+            refreshToken: response.data.refreshToken
+          }
+        });
+      } else {
+        throw new Error(response.data.error || 'Login failed');
       }
-
-      const data = await response.json();
-      
-      dispatch({
-        type: 'LOGIN_SUCCESS',
-        payload: {
-          user: data.user,
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken
-        }
-      });
     } catch (error) {
-      dispatch({
-        type: 'LOGIN_ERROR',
-        payload: error instanceof Error ? error.message : 'Login failed'
-      });
+      const errorMessage = axios.isAxiosError(error) 
+        ? error.response?.data?.error || 'Login failed'
+        : 'Login failed';
+      
+      dispatch({ type: 'LOGIN_ERROR', payload: errorMessage });
+      throw error;
     }
   };
 
   const logout = async () => {
     try {
-      // Call backend logout endpoint
-      if (state.refreshToken) {
-        await fetch('http://localhost:3001/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(state.accessToken && { 'Authorization': `Bearer ${state.accessToken}` })
-          },
-          body: JSON.stringify({ refreshToken: state.refreshToken })
-        });
+      if (state.refreshToken && state.accessToken) {
+        await axios.post(`${API_BASE_URL}/auth/logout`, 
+          { refreshToken: state.refreshToken },
+          { headers: { 'Authorization': `Bearer ${state.accessToken}` }}
+        );
       }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      dispatch({ type: 'LOGOUT' });
-    }
-  };
-
-  const refreshToken = async () => {
-    if (!state.refreshToken) return;
-    
-    try {
-      const response = await fetch('http://localhost:3001/api/auth/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: state.refreshToken })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        dispatch({ type: 'REFRESH_TOKEN', payload: data.accessToken });
-      } else {
-        dispatch({ type: 'LOGOUT' });
-      }
-    } catch (error) {
       dispatch({ type: 'LOGOUT' });
     }
   };
@@ -225,7 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ state, login, logout, refreshToken, clearError }}>
+    <AuthContext.Provider value={{ state, login, logout, clearError }}>
       {children}
     </AuthContext.Provider>
   );

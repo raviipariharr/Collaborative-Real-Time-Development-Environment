@@ -1,4 +1,3 @@
-// frontend/src/pages/Dashboard.tsx - NEW FILE
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -6,79 +5,85 @@ const Dashboard: React.FC = () => {
   const { state, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <span className="text-2xl mr-2">💻</span>
-              <h1 className="text-xl font-bold text-gray-900">CodeCollab</h1>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              {state.user?.avatar && (
-                <img 
-                  src={state.user.avatar} 
-                  alt={state.user.name}
-                  className="w-8 h-8 rounded-full"
-                />
-              )}
-              <span className="text-sm text-gray-700">{state.user?.name}</span>
-              <button
-                onClick={logout}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
+    <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+      <header style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: '1rem 2rem',
+        color: 'white',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <h1 style={{ margin: 0 }}>CodeCollab</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {state.user?.avatar && (
+            <img src={state.user.avatar} alt={state.user.name} 
+              style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+          )}
+          <span>{state.user?.name}</span>
+          <button onClick={logout} style={{
+            background: 'rgba(255,255,255,0.2)',
+            border: 'none',
+            padding: '0.5rem 1rem',
+            borderRadius: '6px',
+            color: 'white',
+            cursor: 'pointer'
+          }}>
+            Logout
+          </button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">
-            Welcome to CodeCollab! 👋
-          </h2>
-          <p className="text-lg text-gray-600 mb-8">
-            Your collaborative coding environment is ready. Let's build something amazing together!
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {/* Feature Cards */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-4xl mb-4">⚡</div>
-              <h3 className="text-xl font-semibold mb-2">Real-time Collaboration</h3>
-              <p className="text-gray-600">Code together with your team in real-time</p>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-4xl mb-4">🔐</div>
-              <h3 className="text-xl font-semibold mb-2">Secure Authentication</h3>
-              <p className="text-gray-600">Protected by Google OAuth 2.0</p>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-4xl mb-4">📱</div>
-              <h3 className="text-xl font-semibold mb-2">Cross-Platform</h3>
-              <p className="text-gray-600">Works on web, mobile, and desktop</p>
-            </div>
+      <main style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+        <h2 style={{ marginBottom: '2rem' }}>Welcome, {state.user?.name}!</h2>
+        
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+          gap: '2rem' 
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <h3>Real-time Collaboration</h3>
+            <p>Code together with your team in real-time with live cursors and conflict resolution.</p>
           </div>
-          
-          {/* Coming Soon */}
-          <div className="mt-12">
-            <div className="bg-blue-50 rounded-lg p-8">
-              <h3 className="text-2xl font-semibold text-blue-900 mb-4">Coming in Step 3</h3>
-              <div className="flex justify-center space-x-8 text-blue-700">
-                <span>🎨 Monaco Editor</span>
-                <span>📁 Project Management</span>
-                <span>💬 Live Chat</span>
-                <span>👥 Team Collaboration</span>
-              </div>
-            </div>
+
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <h3>Secure Authentication</h3>
+            <p>Protected by Google OAuth 2.0 and JWT tokens.</p>
           </div>
+
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <h3>Cross-Platform</h3>
+            <p>Works on web, mobile, and desktop with seamless synchronization.</p>
+          </div>
+        </div>
+
+        <div style={{
+          background: 'white',
+          padding: '2rem',
+          borderRadius: '12px',
+          marginTop: '2rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          <h3>User Info</h3>
+          <pre style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '8px' }}>
+            {JSON.stringify(state.user, null, 2)}
+          </pre>
         </div>
       </main>
     </div>

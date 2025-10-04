@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import projectRoutes from './routes/projectRoutes';
 import documentRoutes from './routes/documentRoutes';
+import invitationRoutes from './routes/invitationRoutes';
 // Import routes
 import authRoutes from './routes/authRoutes';
 
@@ -78,6 +79,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/invitations', invitationRoutes);
 
 // Socket.IO
 // Update the Socket.IO connection handling section

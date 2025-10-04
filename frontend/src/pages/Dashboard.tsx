@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import InvitationBadge from '../components/InvitationBadge';
 
 interface Project {
   id: string;
@@ -19,6 +20,13 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', description: '' });
+  
+  // Invite modal state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState('');
 
   useEffect(() => {
     loadProjects();
@@ -48,6 +56,38 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteProjectId) return;
+    
+    setInviteLoading(true);
+    setInviteError('');
+    
+    try {
+      await apiService.sendInvitation({
+        projectId: inviteProjectId,
+        email: inviteEmail,
+        role: 'EDITOR'
+      });
+      alert('Invitation sent successfully!');
+      setShowInviteModal(false);
+      setInviteEmail('');
+      setInviteProjectId(null);
+    } catch (error: any) {
+      console.error('Failed to send invitation:', error);
+      setInviteError(error.response?.data?.error || 'Failed to send invitation');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const openInviteModal = (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setInviteProjectId(projectId);
+    setShowInviteModal(true);
+    setInviteError('');
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
       <header style={{
@@ -60,6 +100,7 @@ const Dashboard: React.FC = () => {
       }}>
         <h1 style={{ margin: 0 }}>CodeCollab</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <InvitationBadge />
           {state.user?.avatar && (
             <img src={state.user.avatar} alt={state.user.name} 
               style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
@@ -124,16 +165,34 @@ const Dashboard: React.FC = () => {
                 <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
                   {project.description || 'No description'}
                 </p>
-                <div style={{ fontSize: '0.85rem', color: '#999' }}>
+                <div style={{ fontSize: '0.85rem', color: '#999', marginBottom: '1rem' }}>
                   <div>{project._count.documents} files • {project._count.members} members</div>
                   <div>Owner: {project.owner.name}</div>
                 </div>
+                <button 
+                  onClick={(e) => openInviteModal(project.id, e)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 1rem',
+                    background: '#667eea',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#5568d3'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#667eea'}
+                >
+                  Invite Members
+                </button>
               </div>
             ))}
           </div>
         )}
       </main>
 
+      {/* Create Project Modal */}
       {showCreateModal && (
         <div style={{
           position: 'fixed',
@@ -211,6 +270,109 @@ const Dashboard: React.FC = () => {
                   cursor: 'pointer'
                 }}>
                   Create Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Member Modal */}
+      {showInviteModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}
+        onClick={() => {
+          setShowInviteModal(false);
+          setInviteEmail('');
+          setInviteError('');
+        }}
+        >
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%'
+          }}
+          onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '1.5rem' }}>Invite Member to Project</h2>
+            <form onSubmit={handleInvite}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Email Address *</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="colleague@example.com"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '1rem'
+                  }}
+                />
+                <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
+                  They will receive an invitation to join this project
+                </p>
+              </div>
+              
+              {inviteError && (
+                <div style={{
+                  background: '#fee',
+                  color: '#c33',
+                  padding: '0.75rem',
+                  borderRadius: '6px',
+                  marginBottom: '1rem',
+                  fontSize: '0.9rem'
+                }}>
+                  {inviteError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    setInviteEmail('');
+                    setInviteError('');
+                  }} 
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    background: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={inviteLoading}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: inviteLoading ? '#ccc' : '#667eea',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: inviteLoading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {inviteLoading ? 'Sending...' : 'Send Invitation'}
                 </button>
               </div>
             </form>

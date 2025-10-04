@@ -44,5 +44,40 @@ export const apiService = {
       headers: getAuthHeaders()
     });
     return response.data;
+  },
+  // Invitations
+  async sendInvitation(data: { projectId: string; email: string; role?: string }) {
+    const response = await axios.post(`${API_BASE_URL}/invitations`, data, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async getPendingInvitations() {
+    const response = await axios.get(`${API_BASE_URL}/invitations/pending`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async acceptInvitation(invitationId: string) {
+    const response = await axios.post(`${API_BASE_URL}/invitations/${invitationId}/accept`, {}, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async rejectInvitation(invitationId: string) {
+    const response = await axios.post(`${API_BASE_URL}/invitations/${invitationId}/reject`, {}, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async getProjectInvitations(projectId: string) {
+    const response = await axios.get(`${API_BASE_URL}/invitations/project/${projectId}`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
   }
 };

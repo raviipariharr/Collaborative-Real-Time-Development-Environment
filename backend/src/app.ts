@@ -8,9 +8,11 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
-
+import projectRoutes from './routes/projectRoutes';
+import documentRoutes from './routes/documentRoutes';
 // Import routes
 import authRoutes from './routes/authRoutes';
+
 
 dotenv.config();
 
@@ -74,12 +76,66 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/documents', documentRoutes);
 
 // Socket.IO
+// Update the Socket.IO connection handling section
 io.on('connection', (socket) => {
-  console.log('👤 User connected:', socket.id);
+  console.log('User connected:', socket.id);
+  
+  // Join a document room
+  socket.on('join-document', async (data: { documentId: string; userId: string; userName: string }) => {
+    const { documentId, userId, userName } = data;
+    
+    socket.join(documentId);
+    console.log(`${userName} joined document ${documentId}`);
+    
+    // Notify others in the room
+    socket.to(documentId).emit('user-joined', {
+      userId,
+      userName,
+      socketId: socket.id
+    });
+    
+    // Send list of users in this document
+    const sockets = await io.in(documentId).fetchSockets();
+    socket.emit('users-in-document', {
+      count: sockets.length,
+      users: sockets.map(s => ({ socketId: s.id }))
+    });
+  });
+  
+  // Handle code changes
+  socket.on('code-change', (data: { documentId: string; code: string; userId: string }) => {
+    const { documentId, code, userId } = data;
+    
+    // Broadcast to others in the same document (exclude sender)
+    socket.to(documentId).emit('code-update', {
+      code,
+      userId,
+      timestamp: Date.now()
+    });
+  });
+  
+  // Handle cursor position changes
+  socket.on('cursor-change', (data: { documentId: string; position: any; userId: string; userName: string }) => {
+    const { documentId, position, userId, userName } = data;
+    
+    socket.to(documentId).emit('cursor-update', {
+      userId,
+      userName,
+      position,
+      socketId: socket.id
+    });
+  });
+  
+  // Handle disconnect
   socket.on('disconnect', () => {
-    console.log('👋 User disconnected:', socket.id);
+    console.log('User disconnected:', socket.id);
+    
+    // Notify all rooms this socket was in
+    socket.broadcast.emit('user-left', { socketId: socket.id });
   });
 });
 

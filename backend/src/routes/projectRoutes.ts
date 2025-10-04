@@ -1,17 +1,16 @@
-// backend/src/routes/projectRoutes.ts - NEW FILE
 import { Router } from 'express';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { prisma } from '../app';
+import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
+import { PrismaClient } from '@prisma/client';
 
 const router = Router();
+const prisma = new PrismaClient();
 
-// Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// Get all projects for user
-router.get('/', async (req, res) => {
+// Get all projects
+router.get('/', async (req: AuthRequest, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user!.userId;
 
     const projects = await prisma.project.findMany({
       where: {
@@ -22,19 +21,8 @@ router.get('/', async (req, res) => {
         ]
       },
       include: {
-        owner: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        members: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, avatar: true }
-            }
-          }
-        },
-        _count: {
-          select: { documents: true, members: true }
-        }
+        owner: { select: { id: true, name: true, email: true, avatar: true } },
+        _count: { select: { documents: true, members: true } }
       },
       orderBy: { updatedAt: 'desc' }
     });
@@ -46,10 +34,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Create new project
-router.post('/', async (req, res) => {
+// Create project
+router.post('/', async (req: AuthRequest, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user!.userId;
     const { name, description, isPublic } = req.body;
 
     if (!name || name.trim().length === 0) {
@@ -64,12 +52,7 @@ router.post('/', async (req, res) => {
         ownerId: userId
       },
       include: {
-        owner: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        _count: {
-          select: { documents: true, members: true }
-        }
+        owner: { select: { id: true, name: true, email: true, avatar: true } }
       }
     });
 
@@ -81,9 +64,9 @@ router.post('/', async (req, res) => {
 });
 
 // Get single project
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: AuthRequest, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user!.userId;
     const projectId = req.params.id;
 
     const project = await prisma.project.findFirst({
@@ -96,19 +79,8 @@ router.get('/:id', async (req, res) => {
         ]
       },
       include: {
-        owner: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        members: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, avatar: true }
-            }
-          }
-        },
-        documents: {
-          orderBy: { updatedAt: 'desc' }
-        }
+        owner: { select: { id: true, name: true, email: true, avatar: true } },
+        documents: { orderBy: { updatedAt: 'desc' } }
       }
     });
 
@@ -120,77 +92,6 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching project:', error);
     res.status(500).json({ error: 'Failed to fetch project' });
-  }
-});
-
-// Update project
-router.put('/:id', async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const projectId = req.params.id;
-    const { name, description, isPublic } = req.body;
-
-    // Check if user is project owner
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, ownerId: userId }
-    });
-
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found or access denied' });
-    }
-
-    const updatedProject = await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        ...(name && { name: name.trim() }),
-        ...(description !== undefined && { description: description?.trim() || null }),
-        ...(isPublic !== undefined && { isPublic: Boolean(isPublic) }),
-        updatedAt: new Date()
-      },
-      include: {
-        owner: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        members: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, avatar: true }
-            }
-          }
-        }
-      }
-    });
-
-    res.json(updatedProject);
-  } catch (error) {
-    console.error('Error updating project:', error);
-    res.status(500).json({ error: 'Failed to update project' });
-  }
-});
-
-// Delete project
-router.delete('/:id', async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const projectId = req.params.id;
-
-    // Check if user is project owner
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, ownerId: userId }
-    });
-
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found or access denied' });
-    }
-
-    await prisma.project.delete({
-      where: { id: projectId }
-    });
-
-    res.json({ success: true, message: 'Project deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting project:', error);
-    res.status(500).json({ error: 'Failed to delete project' });
   }
 });
 

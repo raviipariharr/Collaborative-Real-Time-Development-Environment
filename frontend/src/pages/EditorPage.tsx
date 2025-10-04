@@ -1,13 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import io, { Socket } from 'socket.io-client';
+
+const SOCKET_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 interface Document {
   id: string;
   name: string;
   language: string;
+}
+
+interface ActiveUser {
+  userId: string;
+  userName: string;
+  socketId: string;
 }
 
 const EditorPage: React.FC = () => {
@@ -20,6 +29,10 @@ const EditorPage: React.FC = () => {
   const [code, setCode] = useState('// Start coding here...\n');
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileName, setNewFileName] = useState('');
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const socketRef = useRef<Socket | null>(null);
+  const editorRef = useRef<any>(null);
+  const isRemoteChange = useRef(false);
 
   useEffect(() => {
     if (projectId) {
@@ -27,6 +40,47 @@ const EditorPage: React.FC = () => {
       loadDocuments();
     }
   }, [projectId]);
+
+  useEffect(() => {
+    if (selectedDoc && state.user) {
+      // Initialize WebSocket connection
+      socketRef.current = io(SOCKET_URL);
+      const socket = socketRef.current;
+
+      socket.on('connect', () => {
+        console.log('Connected to WebSocket');
+        socket.emit('join-document', {
+          documentId: selectedDoc.id,
+          userId: state.user!.id,
+          userName: state.user!.name
+        });
+      });
+
+      socket.on('user-joined', (data: { userId: string; userName: string }) => {
+        console.log(`${data.userName} joined the document`);
+        setActiveUsers(prev => [...prev, data]);
+      });
+
+      socket.on('user-left', (data: { socketId: string }) => {
+        setActiveUsers(prev => prev.filter(u => u.socketId !== data.socketId));
+      });
+
+      socket.on('code-update', (data: { code: string; userId: string }) => {
+        if (data.userId !== state.user?.id) {
+          isRemoteChange.current = true;
+          setCode(data.code);
+        }
+      });
+
+      socket.on('users-in-document', (data: { count: number }) => {
+        console.log(`${data.count} users in document`);
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [selectedDoc, state.user]);
 
   const loadProject = async () => {
     try {
@@ -66,6 +120,25 @@ const EditorPage: React.FC = () => {
     }
   };
 
+  const handleEditorChange = (value: string | undefined) => {
+    if (!value) return;
+    
+    if (!isRemoteChange.current) {
+      setCode(value);
+      
+      // Emit code change to other users
+      if (socketRef.current && selectedDoc && state.user) {
+        socketRef.current.emit('code-change', {
+          documentId: selectedDoc.id,
+          code: value,
+          userId: state.user.id
+        });
+      }
+    } else {
+      isRemoteChange.current = false;
+    }
+  };
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -82,15 +155,25 @@ const EditorPage: React.FC = () => {
             background: 'rgba(255,255,255,0.2)',
             border: 'none',
             color: 'white',
-            padding: '0.5rem',
+            padding: '0.5rem 1rem',
             borderRadius: '4px',
             cursor: 'pointer'
           }}>
-            ← Back
+            Back
           </button>
           <h2 style={{ margin: 0 }}>{project?.name || 'Loading...'}</h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%', 
+              background: '#00ff88',
+              display: 'inline-block'
+            }}></span>
+            <span>{activeUsers.length + 1} active</span>
+          </div>
           <span>{state.user?.name}</span>
         </div>
       </header>
@@ -130,12 +213,30 @@ const EditorPage: React.FC = () => {
                 fontSize: '0.9rem'
               }}
             >
-              📄 {doc.name}
+              {doc.name}
             </div>
           ))}
 
           {documents.length === 0 && (
             <p style={{ fontSize: '0.85rem', color: '#888' }}>No files yet. Create one!</p>
+          )}
+
+          {/* Active Users */}
+          {activeUsers.length > 0 && (
+            <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid #444' }}>
+              <h4 style={{ fontSize: '0.8rem', margin: '0 0 0.5rem 0', color: '#888' }}>
+                ACTIVE USERS
+              </h4>
+              {activeUsers.map(user => (
+                <div key={user.socketId} style={{ 
+                  fontSize: '0.85rem', 
+                  padding: '0.25rem 0',
+                  color: '#ccc'
+                }}>
+                  {user.userName}
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -152,12 +253,16 @@ const EditorPage: React.FC = () => {
             language={selectedDoc?.language || 'javascript'}
             theme="vs-dark"
             value={code}
-            onChange={(value) => setCode(value || '')}
+            onChange={handleEditorChange}
+            onMount={(editor) => {
+              editorRef.current = editor;
+            }}
             options={{
               fontSize: 14,
               minimap: { enabled: true },
               scrollBeyondLastLine: false,
-              wordWrap: 'on'
+              wordWrap: 'on',
+              automaticLayout: true
             }}
           />
         </div>

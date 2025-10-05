@@ -31,7 +31,20 @@ export const apiService = {
     });
     return response.data;
   },
+  
+  async updateProject(id: string, data: { name?: string; description?: string; isPublic?: boolean }) {
+    const response = await axios.put(`${API_BASE_URL}/projects/${id}`, data, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
 
+  async deleteProject(id: string) {
+    const response = await axios.delete(`${API_BASE_URL}/projects/${id}`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
   async createDocument(data: { projectId: string; name: string; language?: string }) {
     const response = await axios.post(`${API_BASE_URL}/documents`, data, {
       headers: getAuthHeaders()

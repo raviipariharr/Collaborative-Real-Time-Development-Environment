@@ -27,6 +27,58 @@ const Dashboard: React.FC = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
+  
+  //update and rename
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '' });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+ 
+  const openEditModal = (project: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingProject(project);
+    setEditForm({ 
+      name: project.name, 
+      description: project.description || '' 
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProject) return;
+
+    try {
+      const updated = await apiService.updateProject(editingProject.id, editForm);
+      setProjects(projects.map(p => p.id === updated.id ? updated : p));
+      setShowEditModal(false);
+      setEditingProject(null);
+    } catch (error) {
+      console.error('Failed to update project:', error);
+      alert('Failed to update project');
+    }
+  };
+
+  const confirmDelete = (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingProjectId(projectId);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteProject = async () => {
+    if (!deletingProjectId) return;
+
+    try {
+      await apiService.deleteProject(deletingProjectId);
+      setProjects(projects.filter(p => p.id !== deletingProjectId));
+      setShowDeleteConfirm(false);
+      setDeletingProjectId(null);
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      alert('Failed to delete project');
+    }
+  };
 
   useEffect(() => {
     loadProjects();
@@ -87,6 +139,8 @@ const Dashboard: React.FC = () => {
     setShowInviteModal(true);
     setInviteError('');
   };
+
+
 
   return (
     <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
@@ -169,23 +223,54 @@ const Dashboard: React.FC = () => {
                   <div>{project._count.documents} files • {project._count.members} members</div>
                   <div>Owner: {project.owner.name}</div>
                 </div>
+
+                {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button 
-                  onClick={(e) => openInviteModal(project.id, e)}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem 1rem',
-                    background: '#667eea',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#5568d3'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = '#667eea'}
-                >
-                  Invite Members
-                </button>
+                onClick={(e) => openEditModal(project, e)}
+                style={{
+                  flex: 1,
+                  padding: '0.5rem',
+                  background: '#4caf50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+        }}
+      >
+        Edit
+      </button>
+      <button 
+        onClick={(e) => openInviteModal(project.id, e)}
+        style={{
+          flex: 1,
+          padding: '0.5rem',
+          background: '#667eea',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontSize: '0.85rem'
+        }}
+      >
+        Invite
+      </button>
+      <button 
+        onClick={(e) => confirmDelete(project.id, e)}
+        style={{
+          padding: '0.5rem 0.75rem',
+          background: '#f44336',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontSize: '0.85rem'
+        }}
+      >
+        Delete
+      </button>
+    </div>
               </div>
             ))}
           </div>
@@ -379,6 +464,146 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Project Modal */}
+{showEditModal && editingProject && (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  }}
+  onClick={() => setShowEditModal(false)}
+  >
+    <div style={{
+      background: 'white',
+      padding: '2rem',
+      borderRadius: '12px',
+      maxWidth: '500px',
+      width: '90%'
+    }}
+    onClick={(e) => e.stopPropagation()}
+    >
+      <h2 style={{ marginBottom: '1.5rem' }}>Edit Project</h2>
+      <form onSubmit={handleUpdateProject}>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name *</label>
+          <input
+            type="text"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            required
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '1rem'
+            }}
+          />
+        </div>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description</label>
+          <textarea
+            value={editForm.description}
+            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              resize: 'vertical'
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+          <button type="button" onClick={() => setShowEditModal(false)} style={{
+            padding: '0.75rem 1.5rem',
+            border: '1px solid #ddd',
+            borderRadius: '6px',
+            background: 'white',
+            cursor: 'pointer'
+          }}>
+            Cancel
+          </button>
+          <button type="submit" style={{
+            padding: '0.75rem 1.5rem',
+            background: '#4caf50',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer'
+          }}>
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
+{/* Delete Confirmation Modal */}
+{showDeleteConfirm && (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  }}
+  onClick={() => setShowDeleteConfirm(false)}
+  >
+    <div style={{
+      background: 'white',
+      padding: '2rem',
+      borderRadius: '12px',
+      maxWidth: '400px',
+      width: '90%'
+    }}
+    onClick={(e) => e.stopPropagation()}
+    >
+      <h2 style={{ marginBottom: '1rem', color: '#f44336' }}>Delete Project?</h2>
+      <p style={{ marginBottom: '1.5rem', color: '#666' }}>
+        Are you sure you want to delete this project? This action cannot be undone. 
+        All files and data will be permanently deleted.
+      </p>
+      <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+        <button onClick={() => setShowDeleteConfirm(false)} style={{
+          padding: '0.75rem 1.5rem',
+          border: '1px solid #ddd',
+          borderRadius: '6px',
+          background: 'white',
+          cursor: 'pointer'
+        }}>
+          Cancel
+        </button>
+        <button onClick={handleDeleteProject} style={{
+          padding: '0.75rem 1.5rem',
+          background: '#f44336',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer'
+        }}>
+          Delete Project
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

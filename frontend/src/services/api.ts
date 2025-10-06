@@ -106,5 +106,20 @@ export const apiService = {
       headers: getAuthHeaders()
     });
     return response.data;
+  },
+   async markMessagesAsRead(projectId: string) {
+    const response = await axios.post(`${API_BASE_URL}/chat/mark-read`, 
+      { projectId },
+      { headers: getAuthHeaders() 
+
+      });
+    return response.data;
+  },
+
+  async getUnreadCount(projectId: string) {
+    const response = await axios.get(`${API_BASE_URL}/chat/unread-count/${projectId}`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
   }
 };

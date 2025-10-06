@@ -55,6 +55,7 @@ router.post('/', async (req: AuthRequest, res) => {
     if (!projectId || !message || message.trim().length === 0) {
       return res.status(400).json({ error: 'Project ID and message are required' });
     }
+    
 
     // Check access
     const hasAccess = await prisma.project.findFirst({
@@ -91,4 +92,60 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
+// Mark messages as read
+router.post('/mark-read', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { projectId } = req.body;
+
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+
+    // Get all unread messages for this user in this project
+    const unreadMessages = await prisma.chatMessage.findMany({
+      where: {
+        projectId,
+        userId: { not: userId }, // Not sent by current user
+        NOT: { readBy: { has: userId } }  // Not read by current user
+      }
+    });
+    await Promise.all(
+      unreadMessages.map(msg =>
+        prisma.chatMessage.update({
+          where: { id: msg.id },
+          data: {
+            readBy: {
+              push: userId
+            }
+          }
+        })
+      )
+    );
+
+    res.json({ success: true, markedCount: unreadMessages.length });
+  } catch (error) {
+    console.error('Error marking messages as read:', error);
+    res.status(500).json({ error: 'Failed to mark messages as read' });
+  }
+});
+// Get unread count
+router.get('/unread-count/:projectId', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { projectId } = req.params;
+
+    const unreadCount = await prisma.chatMessage.count({
+      where: {
+        projectId,
+        userId: { not: userId },
+        NOT: { readBy: { has: userId } }
+      }
+    });
+    res.json({ unreadCount });
+  } catch (error) {
+    console.error('Error getting unread count:', error);
+    res.status(500).json({ error: 'Failed to get unread count' });
+  }
+});
 export default router;

@@ -11,6 +11,7 @@ import { PrismaClient } from '@prisma/client';
 import projectRoutes from './routes/projectRoutes';
 import documentRoutes from './routes/documentRoutes';
 import invitationRoutes from './routes/invitationRoutes';
+import chatRoutes from './routes/chatRoutes';
 // Import routes
 import authRoutes from './routes/authRoutes';
 
@@ -80,6 +81,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/invitations', invitationRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Socket.IO
 // Update the Socket.IO connection handling section
@@ -106,6 +108,19 @@ io.on('connection', (socket) => {
       count: sockets.length,
       users: sockets.map(s => ({ socketId: s.id }))
     });
+  });
+
+  // Handle chat messages
+  socket.on('send-chat-message', (data: { projectId: string; message: any }) => {
+    const { projectId, message } = data;
+    
+    // Broadcast chat message to everyone in the project
+    io.to(projectId).emit('new-chat-message', message);
+  });
+  
+  socket.on('join-project-chat', (projectId: string) => {
+    socket.join(projectId);
+    console.log(`Socket ${socket.id} joined project chat ${projectId}`);
   });
   
   // Handle code changes

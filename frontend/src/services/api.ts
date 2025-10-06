@@ -92,5 +92,19 @@ export const apiService = {
       headers: getAuthHeaders()
     });
     return response.data;
+  },
+
+  async getProjectMessages(projectId: string) {
+    const response = await axios.get(`${API_BASE_URL}/chat/project/${projectId}`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async sendChatMessage(data: { projectId: string; message: string }) {
+    const response = await axios.post(`${API_BASE_URL}/chat`, data, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
   }
 };

@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import io, { Socket } from 'socket.io-client';
+import ChatPanel from '../components/ChatPanel';
 
 const SOCKET_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
@@ -333,6 +334,14 @@ const EditorPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Add Chat Panel */}
+    {projectId && state.user && (
+  <ChatPanel 
+    projectId={projectId} 
+    socket={socketRef.current}
+    currentUserId={state.user.id}
+  />
+  )}
     </div>
   );
 };

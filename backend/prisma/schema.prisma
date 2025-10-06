@@ -18,10 +18,11 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  ownedProjects    Project[]       @relation("ProjectOwner")
+  ownedProjects    Project[]          @relation("ProjectOwner")
   projectMembers   ProjectMember[]
   sessions         Session[]
-  sentInvitations  ProjectInvitation[] @relation("SentInvitations")  // ✅ Added here
+  sentInvitations  ProjectInvitation[] @relation("SentInvitations") 
+  chatMessages ChatMessage[]
 
   @@map("users")
 }
@@ -39,7 +40,8 @@ model Project {
   owner       User              @relation("ProjectOwner", fields: [ownerId], references: [id])
   members     ProjectMember[]
   documents   Document[]
-  invitations ProjectInvitation[]   // ✅ Added here
+  invitations ProjectInvitation[]
+  chatMessages ChatMessage[]     
 
   @@map("projects")
 }
@@ -105,6 +107,20 @@ model ProjectInvitation {
   @@map("project_invitations")
 }
 
+model ChatMessage {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  message   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
 enum UserRole {
   ADMIN
   EDITOR
@@ -124,3 +140,4 @@ enum InvitationStatus {
   REJECTED
   EXPIRED
 }
+

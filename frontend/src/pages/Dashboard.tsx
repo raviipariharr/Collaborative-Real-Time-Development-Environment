@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import InvitationBadge from '../components/InvitationBadge';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Project {
   id: string;
@@ -34,7 +35,7 @@ const Dashboard: React.FC = () => {
   const [editForm, setEditForm] = useState({ name: '', description: '' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
- 
+  const { theme, toggleTheme } = useTheme();
   const openEditModal = (project: Project, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingProject(project);
@@ -143,7 +144,7 @@ const Dashboard: React.FC = () => {
 
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+    <div style={{ minHeight: '100vh', background: theme === 'dark' ? '#1e1e1e' : '#f5f5f5' }}>
       <header style={{
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         padding: '1rem 2rem',
@@ -155,6 +156,18 @@ const Dashboard: React.FC = () => {
         <h1 style={{ margin: 0 }}>CodeCollab</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <InvitationBadge />
+          {/* Theme Toggle */}
+  <button onClick={toggleTheme} style={{
+    background: 'rgba(255,255,255,0.2)',
+    border: 'none',
+    color: 'white',
+    padding: '0.5rem 1rem',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '1.2rem'
+  }}>
+    {theme === 'light' ? '🌙' : '☀️'}
+  </button>
           {state.user?.avatar && (
             <img src={state.user.avatar} alt={state.user.name} 
               style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
@@ -204,10 +217,11 @@ const Dashboard: React.FC = () => {
           }}>
             {projects.map(project => (
               <div key={project.id} style={{
-                background: 'white',
+                background: theme === 'dark' ? '#2d2d2d' : 'white',
+                color: theme === 'dark' ? 'white' : '#333',
                 padding: '1.5rem',
                 borderRadius: '12px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                boxShadow: theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.1)',
                 cursor: 'pointer',
                 transition: 'transform 0.2s',
               }}

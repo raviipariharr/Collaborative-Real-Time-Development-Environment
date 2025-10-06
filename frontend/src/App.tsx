@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import EditorPage from './pages/EditorPage';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { state } = useAuth();
@@ -39,7 +40,8 @@ function App() {
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
         <Router>
           <Routes>
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -48,8 +50,9 @@ function App() {
             <Route path="/editor/:projectId" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
           </Routes>
         </Router>
-      </AuthProvider>
-    </GoogleOAuthProvider>
+        </AuthProvider>
+        </ThemeProvider>
+        </GoogleOAuthProvider>
   );
 }
 

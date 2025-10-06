@@ -5,6 +5,7 @@ import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import io, { Socket } from 'socket.io-client';
 import ChatPanel from '../components/ChatPanel';
+import { useTheme } from '../contexts/ThemeContext';
 
 const SOCKET_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
@@ -34,6 +35,7 @@ const EditorPage: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
   const editorRef = useRef<any>(null);
   const isRemoteChange = useRef(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (projectId) {
@@ -165,6 +167,26 @@ const EditorPage: React.FC = () => {
           <h2 style={{ margin: 0 }}>{project?.name || 'Loading...'}</h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* Theme Toggle Button */}
+    <button onClick={toggleTheme} style={{
+      background: 'rgba(255,255,255,0.2)',
+      border: 'none',
+      color: 'white',
+      padding: '0.5rem 1rem',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontSize: '1.2rem'
+    }}></button>
+    {/* Theme Toggle Button */}
+    <button onClick={toggleTheme} style={{
+      background: 'rgba(255,255,255,0.2)',
+      border: 'none',
+      color: 'white',
+      padding: '0.5rem 1rem',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontSize: '1.2rem'
+    }}></button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ 
               width: '8px', 
@@ -183,7 +205,7 @@ const EditorPage: React.FC = () => {
         {/* Sidebar */}
         <div style={{
           width: '250px',
-          background: '#252526',
+          background: theme === 'dark' ? '#1e1e1e' : '#252526',
           color: 'white',
           padding: '1rem',
           overflowY: 'auto'
@@ -252,7 +274,7 @@ const EditorPage: React.FC = () => {
             height="100%"
             defaultLanguage={selectedDoc?.language || 'javascript'}
             language={selectedDoc?.language || 'javascript'}
-            theme="vs-dark"
+            theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
             value={code}
             onChange={handleEditorChange}
             onMount={(editor) => {

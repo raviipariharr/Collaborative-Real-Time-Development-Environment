@@ -155,7 +155,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
           fontSize: '1.5rem',
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
           zIndex: 999,
-          position: 'relative'
         }}
       >
         💬

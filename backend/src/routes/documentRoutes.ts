@@ -67,4 +67,19 @@ router.get('/project/:projectId', async (req: AuthRequest, res) => {
   }
 });
 
+router.delete('/:id', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.document.delete({
+      where: { id }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
+
 export default router;

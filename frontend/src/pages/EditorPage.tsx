@@ -218,6 +218,19 @@ const EditorPage: React.FC = () => {
     }
   };
 
+  const handleDeleteFile = async (fileId: string) => {
+  try {
+    await apiService.deleteDocument(fileId);
+    setDocuments(documents.filter(d => d.id !== fileId));
+    if (selectedDoc?.id === fileId) {
+      setSelectedDoc(null);
+      setCode('// Start coding here...\n');
+    }
+  } catch (error) {
+    console.error('Failed to delete file:', error);
+  }
+};
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -340,6 +353,7 @@ const EditorPage: React.FC = () => {
               onCreateFolder={handleCreateFolder}
               onCreateFile={handleCreateFileInFolder}
               onDeleteFolder={handleDeleteFolder}
+              onDeleteFile={handleDeleteFile} 
               onRenameFolder={handleRenameFolder}
               theme={theme}
             />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface Document {
   id: string;
@@ -23,6 +23,7 @@ interface FileTreeProps {
   onCreateFolder: (parentId: string | null) => void;
   onCreateFile: (folderId: string | null) => void;
   onDeleteFolder: (folderId: string) => void;
+  onDeleteFile: (fileId: string) => void;  // ADD THIS
   onRenameFolder: (folderId: string, newName: string) => void;
   theme: 'light' | 'dark';
 }
@@ -35,11 +36,43 @@ const FileTree: React.FC<FileTreeProps> = ({
   onCreateFolder,
   onCreateFile,
   onDeleteFolder,
+  onDeleteFile,  // ADD THIS
   onRenameFolder,
   theme
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: string | null } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ 
+    x: number; 
+    y: number; 
+    type: 'folder' | 'file' | 'root'; 
+    id: string | null 
+  } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+        closeContextMenu();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeContextMenu();
+      }
+    };
+
+    if (contextMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [contextMenu]);
 
   const toggleFolder = (folderId: string) => {
     const newExpanded = new Set(expandedFolders);
@@ -51,10 +84,37 @@ const FileTree: React.FC<FileTreeProps> = ({
     setExpandedFolders(newExpanded);
   };
 
-  const handleContextMenu = (e: React.MouseEvent, folderId: string | null) => {
+  const handleFolderContextMenu = (e: React.MouseEvent, folderId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, folderId });
+    setContextMenu({ 
+      x: e.clientX, 
+      y: e.clientY, 
+      type: 'folder',
+      id: folderId 
+    });
+  };
+
+  const handleFileContextMenu = (e: React.MouseEvent, fileId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ 
+      x: e.clientX, 
+      y: e.clientY, 
+      type: 'file',
+      id: fileId 
+    });
+  };
+
+  const handleRootContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ 
+      x: e.clientX, 
+      y: e.clientY, 
+      type: 'root',
+      id: null 
+    });
   };
 
   const closeContextMenu = () => {
@@ -86,10 +146,11 @@ const FileTree: React.FC<FileTreeProps> = ({
             cursor: 'pointer',
             background: 'transparent',
             borderRadius: '4px',
-            transition: 'background 0.2s'
+            transition: 'background 0.2s',
+            userSelect: 'none'
           }}
           onClick={() => toggleFolder(folder.id)}
-          onContextMenu={(e) => handleContextMenu(e, folder.id)}
+          onContextMenu={(e) => handleFolderContextMenu(e, folder.id)}
           onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
         >
@@ -123,9 +184,11 @@ const FileTree: React.FC<FileTreeProps> = ({
           cursor: 'pointer',
           background: isSelected ? (theme === 'dark' ? 'rgba(102, 126, 234, 0.3)' : 'rgba(102, 126, 234, 0.2)') : 'transparent',
           borderRadius: '4px',
-          transition: 'background 0.2s'
+          transition: 'background 0.2s',
+          userSelect: 'none'
         }}
         onClick={() => onSelectDoc(doc)}
+        onContextMenu={(e) => handleFileContextMenu(e, doc.id)}
         onMouseEnter={(e) => !isSelected && (e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')}
         onMouseLeave={(e) => !isSelected && (e.currentTarget.style.background = 'transparent')}
       >
@@ -154,22 +217,25 @@ const FileTree: React.FC<FileTreeProps> = ({
   const rootDocuments = documents.filter(d => !d.folderId);
 
   return (
-    <div style={{ position: 'relative' }} onClick={closeContextMenu}>
+    <div style={{ position: 'relative', height: '100%' }}>
       <div 
-        onContextMenu={(e) => handleContextMenu(e, null)}
-        style={{ minHeight: '100%' }}
+        onContextMenu={handleRootContextMenu}
+        style={{ minHeight: '100%', padding: '0.5rem' }}
       >
         {tree.map(folder => renderFolder(folder))}
         {rootDocuments.map(doc => renderDocument(doc))}
         
         {tree.length === 0 && rootDocuments.length === 0 && (
           <div style={{ 
-            padding: '1rem', 
+            padding: '2rem 1rem', 
             textAlign: 'center', 
             color: '#888',
-            fontSize: '0.85rem'
+            fontSize: '0.85rem',
+            lineHeight: '1.6'
           }}>
-            Right-click to create folders and files
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📁</div>
+            <div>Right-click anywhere to create</div>
+            <div>folders and files</div>
           </div>
         )}
       </div>
@@ -177,6 +243,7 @@ const FileTree: React.FC<FileTreeProps> = ({
       {/* Context Menu */}
       {contextMenu && (
         <div
+          ref={contextMenuRef}
           style={{
             position: 'fixed',
             top: contextMenu.y,
@@ -186,96 +253,152 @@ const FileTree: React.FC<FileTreeProps> = ({
             borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
             zIndex: 1000,
-            minWidth: '180px'
+            minWidth: '180px',
+            overflow: 'hidden'
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={() => {
-              onCreateFolder(contextMenu.folderId);
-              closeContextMenu();
-            }}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              background: 'transparent',
-              border: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-              color: theme === 'dark' ? 'white' : '#333',
-              fontSize: '0.9rem'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            📁 New Folder
-          </button>
-          <button
-            onClick={() => {
-              onCreateFile(contextMenu.folderId);
-              closeContextMenu();
-            }}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              background: 'transparent',
-              border: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-              color: theme === 'dark' ? 'white' : '#333',
-              fontSize: '0.9rem'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            📄 New File
-          </button>
-          {contextMenu.folderId && (
+          {/* Root or Folder Context Menu */}
+          {(contextMenu.type === 'root' || contextMenu.type === 'folder') && (
             <>
               <button
                 onClick={() => {
-                  const newName = prompt('Enter new folder name:');
-                  if (newName) {
-                    onRenameFolder(contextMenu.folderId!, newName);
-                  }
+                  onCreateFolder(contextMenu.id);
                   closeContextMenu();
                 }}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: '0.75rem 1rem',
                   background: 'transparent',
                   border: 'none',
                   textAlign: 'left',
                   cursor: 'pointer',
                   color: theme === 'dark' ? 'white' : '#333',
-                  fontSize: '0.9rem'
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                ✏️ Rename
+                <span>📁</span> New Folder
               </button>
               <button
                 onClick={() => {
-                  if (confirm('Delete this folder and all its contents?')) {
-                    onDeleteFolder(contextMenu.folderId!);
+                  onCreateFile(contextMenu.id);
+                  closeContextMenu();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: theme === 'dark' ? 'white' : '#333',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span>📄</span> New File
+              </button>
+            </>
+          )}
+
+          {/* Folder-specific actions */}
+          {contextMenu.type === 'folder' && contextMenu.id && (
+            <>
+              <div style={{ 
+                height: '1px', 
+                background: theme === 'dark' ? '#444' : '#ddd',
+                margin: '0.25rem 0'
+              }} />
+              <button
+                onClick={() => {
+                  const newName = prompt('Enter new folder name:');
+                  if (newName && newName.trim()) {
+                    onRenameFolder(contextMenu.id!, newName.trim());
                   }
                   closeContextMenu();
                 }}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: theme === 'dark' ? 'white' : '#333',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span>✏️</span> Rename
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('Delete this folder and all its contents?')) {
+                    onDeleteFolder(contextMenu.id!);
+                  }
+                  closeContextMenu();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
                   background: 'transparent',
                   border: 'none',
                   textAlign: 'left',
                   cursor: 'pointer',
                   color: '#f44336',
-                  fontSize: '0.9rem'
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(244,67,54,0.1)' : 'rgba(244,67,54,0.05)'}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,67,54,0.1)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                🗑️ Delete
+                <span>🗑️</span> Delete Folder
+              </button>
+            </>
+          )}
+
+          {/* File-specific actions */}
+          {contextMenu.type === 'file' && contextMenu.id && (
+            <>
+              <button
+                onClick={() => {
+                  if (confirm('Delete this file?')) {
+                    onDeleteFile(contextMenu.id!);
+                  }
+                  closeContextMenu();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: '#f44336',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,67,54,0.1)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span>🗑️</span> Delete File
               </button>
             </>
           )}

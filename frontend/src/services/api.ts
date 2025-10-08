@@ -45,7 +45,7 @@ export const apiService = {
     });
     return response.data;
   },
-  async createDocument(data: { projectId: string; name: string; language?: string }) {
+  async createDocument(data: { projectId: string; name: string; language?: string; folderId?: string }) {
     const response = await axios.post(`${API_BASE_URL}/documents`, data, {
       headers: getAuthHeaders()
     });
@@ -158,5 +158,12 @@ export const apiService = {
       { headers: getAuthHeaders() }
     );
     return response.data;
-  }
+  },
+
+  async deleteDocument(id: string) {
+  const response = await axios.delete(`${API_BASE_URL}/documents/${id}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+}
 };

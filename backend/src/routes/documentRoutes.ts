@@ -10,20 +10,43 @@ router.use(authMiddleware);
 // Create document
 router.post('/', async (req: AuthRequest, res) => {
   try {
-    const { projectId, name, language = 'javascript' } = req.body;
+    const { projectId,folderId,  name, language = 'javascript' } = req.body;
 
     if (!projectId || !name) {
       return res.status(400).json({ error: 'Project ID and name are required' });
     }
 
     const document = await prisma.document.create({
-      data: { projectId, name: name.trim(), language: language.toLowerCase() }
+      data: { 
+        projectId, 
+        folderId: folderId || null,
+        name: name.trim(), 
+        language: language.toLowerCase() 
+      }
     });
 
     res.status(201).json(document);
   } catch (error) {
     console.error('Error creating document:', error);
     res.status(500).json({ error: 'Failed to create document' });
+  }
+});
+
+// Add endpoint to move document to folder
+router.put('/:id/move', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { folderId } = req.body;
+
+    const document = await prisma.document.update({
+      where: { id },
+      data: { folderId: folderId || null }
+    });
+
+    res.json(document);
+  } catch (error) {
+    console.error('Error moving document:', error);
+    res.status(500).json({ error: 'Failed to move document' });
   }
 });
 

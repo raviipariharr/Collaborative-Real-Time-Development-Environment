@@ -121,5 +121,42 @@ export const apiService = {
       headers: getAuthHeaders()
     });
     return response.data;
+  },
+
+  // Folders
+  async getFolders(projectId: string) {
+    const response = await axios.get(`${API_BASE_URL}/folders/project/${projectId}`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async createFolder(data: { projectId: string; name: string; parentId?: string }) {
+    const response = await axios.post(`${API_BASE_URL}/folders`, data, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async renameFolder(id: string, name: string) {
+    const response = await axios.put(`${API_BASE_URL}/folders/${id}`, { name }, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async deleteFolder(id: string) {
+    const response = await axios.delete(`${API_BASE_URL}/folders/${id}`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+  async moveDocument(documentId: string, folderId: string | null) {
+    const response = await axios.put(`${API_BASE_URL}/documents/${documentId}/move`, 
+      { folderId },
+      { headers: getAuthHeaders() }
+    );
+    return response.data;
   }
 };

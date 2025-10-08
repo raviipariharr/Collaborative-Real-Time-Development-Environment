@@ -12,8 +12,9 @@ import projectRoutes from './routes/projectRoutes';
 import documentRoutes from './routes/documentRoutes';
 import invitationRoutes from './routes/invitationRoutes';
 import chatRoutes from './routes/chatRoutes';
-// Import routes
 import authRoutes from './routes/authRoutes';
+import folderRoutes from './routes/folderRoutes';
+
 
 
 dotenv.config();
@@ -42,6 +43,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -82,6 +84,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/folders', folderRoutes);
 
 // Socket.IO
 // Update the Socket.IO connection handling section

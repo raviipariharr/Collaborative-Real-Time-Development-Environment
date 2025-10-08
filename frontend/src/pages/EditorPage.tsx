@@ -153,7 +153,7 @@ const EditorPage: React.FC = () => {
       console.error('Failed to create file:', error);
     }
   };
-
+  
   const handleCreateFolder = (parentId: string | null) => {
     setNewFolderParentId(parentId);
     setShowNewFolderModal(true);
@@ -184,6 +184,20 @@ const EditorPage: React.FC = () => {
       console.error('Failed to rename folder:', error);
     }
   };
+
+  const handleRenameFile = async (fileId: string, newName: string) => {
+  try {
+    await apiService.renameDocument(fileId, newName);
+    setDocuments(documents.map(d => 
+      d.id === fileId ? { ...d, name: newName } : d
+    ));
+    if (selectedDoc?.id === fileId) {
+      setSelectedDoc({ ...selectedDoc, name: newName });
+    }
+  } catch (error) {
+    console.error('Failed to rename file:', error);
+  }
+};
 
   const handleDeleteFolder = async (folderId: string) => {
     try {
@@ -355,6 +369,7 @@ const EditorPage: React.FC = () => {
               onDeleteFolder={handleDeleteFolder}
               onDeleteFile={handleDeleteFile} 
               onRenameFolder={handleRenameFolder}
+              onRenameFile={handleRenameFile}
               theme={theme}
             />
           </div>

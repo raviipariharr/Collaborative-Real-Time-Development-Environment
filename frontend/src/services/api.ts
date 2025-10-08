@@ -165,5 +165,13 @@ export const apiService = {
     headers: getAuthHeaders()
   });
   return response.data;
+},
+
+async renameDocument(id: string, name: string) {
+  const response = await axios.put(`${API_BASE_URL}/documents/${id}/rename`, 
+    { name },
+    { headers: getAuthHeaders() }
+  );
+  return response.data;
 }
 };

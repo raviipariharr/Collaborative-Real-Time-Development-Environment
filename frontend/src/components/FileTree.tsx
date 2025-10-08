@@ -25,6 +25,7 @@ interface FileTreeProps {
   onDeleteFolder: (folderId: string) => void;
   onDeleteFile: (fileId: string) => void;  // ADD THIS
   onRenameFolder: (folderId: string, newName: string) => void;
+  onRenameFile: (fileId: string, newName: string) => void; 
   theme: 'light' | 'dark';
 }
 
@@ -36,7 +37,8 @@ const FileTree: React.FC<FileTreeProps> = ({
   onCreateFolder,
   onCreateFile,
   onDeleteFolder,
-  onDeleteFile,  // ADD THIS
+  onDeleteFile, 
+  onRenameFile, 
   onRenameFolder,
   theme
 }) => {
@@ -373,35 +375,62 @@ const FileTree: React.FC<FileTreeProps> = ({
           )}
 
           {/* File-specific actions */}
-          {contextMenu.type === 'file' && contextMenu.id && (
-            <>
-              <button
-                onClick={() => {
-                  if (confirm('Delete this file?')) {
-                    onDeleteFile(contextMenu.id!);
-                  }
-                  closeContextMenu();
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  background: 'transparent',
-                  border: 'none',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  color: '#f44336',
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,67,54,0.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                <span>🗑️</span> Delete File
-              </button>
-            </>
-          )}
+{contextMenu.type === 'file' && contextMenu.id && (
+  <>
+    <button
+      onClick={() => {
+        const file = documents.find(d => d.id === contextMenu.id);
+        const newName = prompt('Enter new file name:', file?.name);
+        if (newName && newName.trim()) {
+          onRenameFile(contextMenu.id!, newName.trim());
+        }
+        closeContextMenu();
+      }}
+      style={{
+        width: '100%',
+        padding: '0.75rem 1rem',
+        background: 'transparent',
+        border: 'none',
+        textAlign: 'left',
+        cursor: 'pointer',
+        color: theme === 'dark' ? 'white' : '#333',
+        fontSize: '0.9rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem'
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+    >
+      <span>✏️</span> Rename
+    </button>
+    <button
+      onClick={() => {
+        if (confirm('Delete this file?')) {
+          onDeleteFile(contextMenu.id!);
+        }
+        closeContextMenu();
+      }}
+      style={{
+        width: '100%',
+        padding: '0.75rem 1rem',
+        background: 'transparent',
+        border: 'none',
+        textAlign: 'left',
+        cursor: 'pointer',
+        color: '#f44336',
+        fontSize: '0.9rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem'
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,67,54,0.1)'}
+      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+    >
+      <span>🗑️</span> Delete File
+    </button>
+  </>
+)}
         </div>
       )}
     </div>

@@ -35,6 +35,11 @@ const EditorPage: React.FC = () => {
   const { state } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
+  // Responsive states
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 768);
+  const [showChat, setShowChat] = useState(false);
+
   // Project data
   const [project, setProject] = useState<any>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -54,6 +59,20 @@ const EditorPage: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
   const editorRef = useRef<any>(null);
   const isRemoteChange = useRef(false);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile && !showSidebar) {
+        setShowSidebar(true);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [showSidebar]);
 
   // Load project data
   useEffect(() => {
@@ -93,10 +112,6 @@ const EditorPage: React.FC = () => {
           isRemoteChange.current = true;
           setCode(data.code);
         }
-      });
-
-      socket.on('users-in-document', (data: { count: number }) => {
-        console.log(`${data.count} users in document`);
       });
 
       return () => {
@@ -153,7 +168,7 @@ const EditorPage: React.FC = () => {
       console.error('Failed to create file:', error);
     }
   };
-  
+
   const handleCreateFolder = (parentId: string | null) => {
     setNewFolderParentId(parentId);
     setShowNewFolderModal(true);
@@ -186,18 +201,18 @@ const EditorPage: React.FC = () => {
   };
 
   const handleRenameFile = async (fileId: string, newName: string) => {
-  try {
-    await apiService.renameDocument(fileId, newName);
-    setDocuments(documents.map(d => 
-      d.id === fileId ? { ...d, name: newName } : d
-    ));
-    if (selectedDoc?.id === fileId) {
-      setSelectedDoc({ ...selectedDoc, name: newName });
+    try {
+      await apiService.renameDocument(fileId, newName);
+      setDocuments(documents.map(d => 
+        d.id === fileId ? { ...d, name: newName } : d
+      ));
+      if (selectedDoc?.id === fileId) {
+        setSelectedDoc({ ...selectedDoc, name: newName });
+      }
+    } catch (error) {
+      console.error('Failed to rename file:', error);
     }
-  } catch (error) {
-    console.error('Failed to rename file:', error);
-  }
-};
+  };
 
   const handleDeleteFolder = async (folderId: string) => {
     try {
@@ -233,137 +248,229 @@ const EditorPage: React.FC = () => {
   };
 
   const handleDeleteFile = async (fileId: string) => {
-  try {
-    await apiService.deleteDocument(fileId);
-    setDocuments(documents.filter(d => d.id !== fileId));
-    if (selectedDoc?.id === fileId) {
-      setSelectedDoc(null);
-      setCode('// Start coding here...\n');
+    try {
+      await apiService.deleteDocument(fileId);
+      setDocuments(documents.filter(d => d.id !== fileId));
+      if (selectedDoc?.id === fileId) {
+        setSelectedDoc(null);
+        setCode('// Start coding here...\n');
+      }
+    } catch (error) {
+      console.error('Failed to delete file:', error);
     }
-  } catch (error) {
-    console.error('Failed to delete file:', error);
-  }
-};
+  };
+
+  const handleSelectDoc = (doc: Document) => {
+    setSelectedDoc(doc);
+    if (isMobile) {
+      setShowSidebar(false);
+    }
+  };
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Responsive Header */}
       <header style={{
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '0.75rem 1.5rem',
+        padding: 'clamp(0.5rem, 2vw, 0.75rem) clamp(0.75rem, 3vw, 1.5rem)',
         color: 'white',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        flexWrap: 'wrap',
+        gap: '0.5rem'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 2vw, 1rem)' }}>
+          {/* Mobile Menu Toggle */}
+          {isMobile && (
+            <button onClick={() => setShowSidebar(!showSidebar)} style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              color: 'white',
+              padding: '0.5rem',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              ☰
+            </button>
+          )}
+          
           <button onClick={() => navigate('/dashboard')} style={{
             background: 'rgba(255,255,255,0.2)',
             border: 'none',
             color: 'white',
-            padding: '0.5rem 1rem',
+            padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.6rem, 2vw, 1rem)',
             borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '0.9rem',
-            fontWeight: '500',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
-          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-          >
-            ← Back
+            fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)',
+            fontWeight: '500'
+          }}>
+            ← {isMobile ? '' : 'Back'}
           </button>
-          <h2 style={{ margin: 0, fontSize: '1.2rem' }}>{project?.name || 'Loading...'}</h2>
+          
+          <h2 style={{ 
+            margin: 0, 
+            fontSize: 'clamp(0.9rem, 2.5vw, 1.2rem)',
+            maxWidth: isMobile ? '150px' : 'none',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {project?.name || 'Loading...'}
+          </h2>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 'clamp(0.4rem, 1.5vw, 1rem)',
+          flexWrap: 'wrap'
+        }}>
+          {/* Active Users Badge */}
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
             gap: '0.5rem',
             background: 'rgba(255,255,255,0.15)',
-            padding: '0.4rem 0.8rem',
-            borderRadius: '20px'
+            padding: 'clamp(0.3rem, 1vw, 0.4rem) clamp(0.5rem, 1.5vw, 0.8rem)',
+            borderRadius: '20px',
+            fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)'
           }}>
             <span style={{ 
-              width: '8px', 
-              height: '8px', 
+              width: '6px', 
+              height: '6px', 
               borderRadius: '50%', 
               background: '#00ff88',
               display: 'inline-block',
-              boxShadow: '0 0 8px #00ff88'
+              boxShadow: '0 0 6px #00ff88'
             }}></span>
-            <span style={{ fontSize: '0.9rem' }}>{activeUsers.length + 1} active</span>
+            <span>{activeUsers.length + 1}</span>
           </div>
 
+          {/* Theme Toggle */}
           <button onClick={toggleTheme} style={{
             background: 'rgba(255,255,255,0.3)',
             border: '2px solid rgba(255,255,255,0.5)',
             color: 'white',
-            padding: '0.5rem 1rem',
+            padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.6rem, 2vw, 1rem)',
             borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: '1.2rem',
+            fontSize: 'clamp(1rem, 2vw, 1.2rem)',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
-            fontWeight: 'bold',
-            transition: 'all 0.2s',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.4)';
-            e.currentTarget.style.transform = 'scale(1.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-          >
+            gap: '0.3rem'
+          }}>
             {theme === 'light' ? '🌙' : '☀️'}
-            <span style={{ fontSize: '0.8rem' }}>{theme === 'light' ? 'Dark' : 'Light'}</span>
+            {!isMobile && (
+              <span style={{ fontSize: 'clamp(0.7rem, 1.5vw, 0.8rem)' }}>
+                {theme === 'light' ? 'Dark' : 'Light'}
+              </span>
+            )}
           </button>
 
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.5rem',
-            background: 'rgba(255,255,255,0.15)',
-            padding: '0.4rem 0.8rem',
-            borderRadius: '20px'
-          }}>
-            <span style={{ fontSize: '0.9rem' }}>{state.user?.name}</span>
-          </div>
+          {/* Chat Toggle (Mobile) */}
+          {isMobile && (
+            <button onClick={() => setShowChat(!showChat)} style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              color: 'white',
+              padding: '0.5rem',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '1.2rem'
+            }}>
+              💬
+            </button>
+          )}
+
+          {/* User Info (Desktop only) */}
+          {!isMobile && (
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.5rem',
+              background: 'rgba(255,255,255,0.15)',
+              padding: '0.4rem 0.8rem',
+              borderRadius: '20px',
+              fontSize: '0.9rem'
+            }}>
+              <span>{state.user?.name}</span>
+            </div>
+          )}
         </div>
       </header>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+        {/* Mobile Sidebar Overlay */}
+        {isMobile && showSidebar && (
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.5)',
+              zIndex: 999
+            }}
+            onClick={() => setShowSidebar(false)}
+          />
+        )}
+
         {/* Sidebar with File Tree */}
         <div style={{
-          width: '250px',
+          width: isMobile ? '80%' : 'clamp(200px, 20vw, 300px)',
+          maxWidth: isMobile ? '280px' : 'none',
           background: theme === 'dark' ? '#1e1e1e' : '#252526',
           color: 'white',
-          display: 'flex',
+          display: showSidebar ? 'flex' : 'none',
           flexDirection: 'column',
-          overflowY: 'auto'
+          overflowY: 'auto',
+          position: isMobile ? 'fixed' : 'relative',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          zIndex: 1000,
+          boxShadow: isMobile ? '2px 0 8px rgba(0,0,0,0.3)' : 'none'
         }}>
           <div style={{ 
-            padding: '1rem',
-            borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#444'}`
+            padding: 'clamp(0.75rem, 2vw, 1rem)',
+            borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#444'}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}>
-            <h3 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase' }}>
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)', 
+              textTransform: 'uppercase' 
+            }}>
               Explorer
             </h3>
+            {isMobile && (
+              <button onClick={() => setShowSidebar(false)} style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'white',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0'
+              }}>
+                ✕
+              </button>
+            )}
           </div>
           
-          <div style={{ flex: 1, padding: '0.5rem' }}>
+          <div style={{ flex: 1, padding: '0.5rem', overflowY: 'auto' }}>
             <FileTree
               folders={folders}
               documents={documents}
               selectedDocId={selectedDoc?.id || null}
-              onSelectDoc={setSelectedDoc}
+              onSelectDoc={handleSelectDoc}
               onCreateFolder={handleCreateFolder}
               onCreateFile={handleCreateFileInFolder}
               onDeleteFolder={handleDeleteFolder}
@@ -376,14 +483,22 @@ const EditorPage: React.FC = () => {
         </div>
 
         {/* Editor */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column',
+          minWidth: 0
+        }}>
           {selectedDoc && (
             <div style={{ 
               background: theme === 'dark' ? '#1e1e1e' : '#f3f3f3',
-              padding: '0.5rem 1rem', 
+              padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)', 
               color: theme === 'dark' ? 'white' : '#333',
-              fontSize: '0.9rem',
-              borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`
+              fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)',
+              borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
             }}>
               {selectedDoc.name}
             </div>
@@ -399,17 +514,63 @@ const EditorPage: React.FC = () => {
               editorRef.current = editor;
             }}
             options={{
-              fontSize: 14,
-              minimap: { enabled: true },
+              fontSize: isMobile ? 12 : 14,
+              minimap: { enabled: !isMobile },
               scrollBeyondLastLine: false,
               wordWrap: 'on',
-              automaticLayout: true
+              automaticLayout: true,
+              lineNumbers: isMobile ? 'off' : 'on',
+              glyphMargin: !isMobile
             }}
           />
         </div>
+
+        {/* Chat Panel - Responsive */}
+        {projectId && state.user && (
+          <div style={{
+            position: isMobile ? 'fixed' : 'relative',
+            right: 0,
+            bottom: 0,
+            top: isMobile ? 'auto' : 0,
+            width: isMobile ? '100%' : 'auto',
+            maxHeight: isMobile ? '70vh' : 'none',
+            display: (isMobile && !showChat) ? 'none' : 'block',
+            zIndex: isMobile ? 1001 : 1,
+            boxShadow: isMobile ? '0 -2px 10px rgba(0,0,0,0.3)' : 'none'
+          }}>
+            <ChatPanel 
+              projectId={projectId} 
+              socket={socketRef.current}
+              currentUserId={state.user.id}
+            />
+            {isMobile && showChat && (
+              <button 
+                onClick={() => setShowChat(false)}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  background: 'rgba(0,0,0,0.5)',
+                  border: 'none',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* New File Modal */}
+      {/* Responsive Modals */}
       {showNewFile && (
         <div style={{
           position: 'fixed',
@@ -421,7 +582,8 @@ const EditorPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 2000,
+          padding: '1rem'
         }}
         onClick={() => {
           setShowNewFile(false);
@@ -432,13 +594,14 @@ const EditorPage: React.FC = () => {
           <div style={{
             background: theme === 'dark' ? '#2d2d2d' : 'white',
             color: theme === 'dark' ? 'white' : '#333',
-            padding: '2rem',
+            padding: 'clamp(1.5rem, 3vw, 2rem)',
             borderRadius: '8px',
-            minWidth: '400px'
+            width: '100%',
+            maxWidth: '400px'
           }}
           onClick={(e) => e.stopPropagation()}
           >
-            <h3>Create New File</h3>
+            <h3 style={{ fontSize: 'clamp(1rem, 2.5vw, 1.2rem)' }}>Create New File</h3>
             <form onSubmit={handleCreateFile}>
               <input
                 type="text"
@@ -449,36 +612,40 @@ const EditorPage: React.FC = () => {
                 autoFocus
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: 'clamp(0.6rem, 2vw, 0.75rem)',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   marginBottom: '1rem',
                   background: theme === 'dark' ? '#1e1e1e' : 'white',
-                  color: theme === 'dark' ? 'white' : '#333'
+                  color: theme === 'dark' ? 'white' : '#333',
+                  fontSize: 'clamp(0.9rem, 2vw, 1rem)',
+                  boxSizing: 'border-box'
                 }}
               />
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 <button type="button" onClick={() => {
                   setShowNewFile(false);
                   setNewFileName('');
                   setNewFolderParentId(null);
                 }} style={{
-                  padding: '0.5rem 1rem',
+                  padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   background: 'transparent',
                   cursor: 'pointer',
-                  color: theme === 'dark' ? 'white' : '#333'
+                  color: theme === 'dark' ? 'white' : '#333',
+                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)'
                 }}>
                   Cancel
                 </button>
                 <button type="submit" style={{
-                  padding: '0.5rem 1rem',
+                  padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
                   background: '#667eea',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)'
                 }}>
                   Create
                 </button>
@@ -500,7 +667,8 @@ const EditorPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 2000,
+          padding: '1rem'
         }}
         onClick={() => {
           setShowNewFolderModal(false);
@@ -511,13 +679,14 @@ const EditorPage: React.FC = () => {
           <div style={{
             background: theme === 'dark' ? '#2d2d2d' : 'white',
             color: theme === 'dark' ? 'white' : '#333',
-            padding: '2rem',
+            padding: 'clamp(1.5rem, 3vw, 2rem)',
             borderRadius: '8px',
-            minWidth: '400px'
+            width: '100%',
+            maxWidth: '400px'
           }}
           onClick={(e) => e.stopPropagation()}
           >
-            <h3>Create New Folder</h3>
+            <h3 style={{ fontSize: 'clamp(1rem, 2.5vw, 1.2rem)' }}>Create New Folder</h3>
             <form onSubmit={handleCreateFolderSubmit}>
               <input
                 type="text"
@@ -528,36 +697,40 @@ const EditorPage: React.FC = () => {
                 autoFocus
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: 'clamp(0.6rem, 2vw, 0.75rem)',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   marginBottom: '1rem',
                   background: theme === 'dark' ? '#1e1e1e' : 'white',
-                  color: theme === 'dark' ? 'white' : '#333'
+                  color: theme === 'dark' ? 'white' : '#333',
+                  fontSize: 'clamp(0.9rem, 2vw, 1rem)',
+                  boxSizing: 'border-box'
                 }}
               />
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 <button type="button" onClick={() => {
                   setShowNewFolderModal(false);
                   setNewFolderName('');
                   setNewFolderParentId(null);
                 }} style={{
-                  padding: '0.5rem 1rem',
+                  padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   background: 'transparent',
                   cursor: 'pointer',
-                  color: theme === 'dark' ? 'white' : '#333'
+                  color: theme === 'dark' ? 'white' : '#333',
+                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)'
                 }}>
                   Cancel
                 </button>
                 <button type="submit" style={{
-                  padding: '0.5rem 1rem',
+                  padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
                   background: '#667eea',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)'
                 }}>
                   Create
                 </button>
@@ -567,15 +740,16 @@ const EditorPage: React.FC = () => {
         </div>
       )}
 
-      {/* Chat Panel */}
-      {projectId && state.user && (
-        <ChatPanel 
-          projectId={projectId} 
-          socket={socketRef.current}
-          currentUserId={state.user.id}
-        />
-      )}
+      <style>{`
+        @media (max-width: 768px) {
+          .monaco-editor .margin,
+          .monaco-editor .minimap {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
+
 export default EditorPage;

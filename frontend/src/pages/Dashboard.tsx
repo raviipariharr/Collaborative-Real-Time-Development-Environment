@@ -21,6 +21,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', description: '' });
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   
   // Invite modal state
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -29,13 +30,14 @@ const Dashboard: React.FC = () => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   
-  //update and rename
+  // Update and rename
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editForm, setEditForm] = useState({ name: '', description: '' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const { theme, toggleTheme } = useTheme();
+
   const openEditModal = (project: Project, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingProject(project);
@@ -141,38 +143,52 @@ const Dashboard: React.FC = () => {
     setInviteError('');
   };
 
-
-
   return (
     <div style={{ minHeight: '100vh', background: theme === 'dark' ? '#1e1e1e' : '#f5f5f5' }}>
+      {/* Responsive Header */}
       <header style={{
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '1rem 2rem',
+        padding: '1rem',
         color: 'white',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '1rem'
       }}>
-        <h1 style={{ margin: 0 }}>CodeCollab</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <h1 style={{ margin: 0, fontSize: 'clamp(1.2rem, 4vw, 1.8rem)' }}>CodeCollab</h1>
+        
+        {/* Desktop Menu */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '1rem',
+          flexWrap: 'wrap'
+        }} className="desktop-menu">
           <InvitationBadge />
-          {/* Theme Toggle */}
-  <button onClick={toggleTheme} style={{
-    background: 'rgba(255,255,255,0.2)',
-    border: 'none',
-    color: 'white',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '1.2rem'
-  }}>
-    {theme === 'light' ? '🌙' : '☀️'}
-  </button>
+          <button onClick={toggleTheme} style={{
+            background: 'rgba(255,255,255,0.2)',
+            border: 'none',
+            color: 'white',
+            padding: '0.5rem 1rem',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '1.2rem'
+          }}>
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
           {state.user?.avatar && (
             <img src={state.user.avatar} alt={state.user.name} 
-              style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+              style={{ 
+                width: '40px', 
+                height: '40px', 
+                borderRadius: '50%',
+                display: window.innerWidth < 768 ? 'none' : 'block'
+              }} />
           )}
-          <span>{state.user?.name}</span>
+          <span style={{ display: window.innerWidth < 768 ? 'none' : 'inline' }}>
+            {state.user?.name}
+          </span>
           <button onClick={logout} style={{
             background: 'rgba(255,255,255,0.2)',
             border: 'none',
@@ -184,20 +200,72 @@ const Dashboard: React.FC = () => {
             Logout
           </button>
         </div>
+
+        {/* Mobile Menu Button */}
+        <button 
+          onClick={() => setShowMobileMenu(!showMobileMenu)}
+          style={{
+            display: window.innerWidth < 768 ? 'block' : 'none',
+            background: 'rgba(255,255,255,0.2)',
+            border: 'none',
+            color: 'white',
+            padding: '0.5rem 1rem',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '1.5rem'
+          }}
+        >
+          ☰
+        </button>
       </header>
 
-      <main style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <h2>Your Projects</h2>
+      {/* Mobile Menu Dropdown */}
+      {showMobileMenu && (
+        <div style={{
+          background: theme === 'dark' ? '#2d2d2d' : 'white',
+          padding: '1rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          display: window.innerWidth < 768 ? 'block' : 'none'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {state.user?.avatar && (
+                <img src={state.user.avatar} alt={state.user.name} 
+                  style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+              )}
+              <span style={{ color: theme === 'dark' ? 'white' : '#333' }}>
+                {state.user?.name}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main style={{ 
+        padding: 'clamp(1rem, 3vw, 2rem)', 
+        maxWidth: '1400px', 
+        margin: '0 auto',
+        width: '100%'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '2rem',
+          flexWrap: 'wrap',
+          gap: '1rem'
+        }}>
+          <h2 style={{ margin: 0, fontSize: 'clamp(1.2rem, 3vw, 1.5rem)' }}>Your Projects</h2>
           <button onClick={() => setShowCreateModal(true)} style={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white',
             border: 'none',
-            padding: '0.75rem 1.5rem',
+            padding: 'clamp(0.6rem, 2vw, 0.75rem) clamp(1rem, 3vw, 1.5rem)',
             borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: '1rem',
-            fontWeight: 'bold'
+            fontSize: 'clamp(0.9rem, 2vw, 1rem)',
+            fontWeight: 'bold',
+            whiteSpace: 'nowrap'
           }}>
             + New Project
           </button>
@@ -206,20 +274,22 @@ const Dashboard: React.FC = () => {
         {loading ? (
           <p>Loading projects...</p>
         ) : projects.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem' }}>
-            <p style={{ fontSize: '1.2rem', color: '#666' }}>No projects yet. Create your first project!</p>
+          <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+            <p style={{ fontSize: 'clamp(1rem, 2.5vw, 1.2rem)', color: '#666' }}>
+              No projects yet. Create your first project!
+            </p>
           </div>
         ) : (
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
-            gap: '1.5rem' 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', 
+            gap: 'clamp(1rem, 2vw, 1.5rem)'
           }}>
             {projects.map(project => (
               <div key={project.id} style={{
                 background: theme === 'dark' ? '#2d2d2d' : 'white',
                 color: theme === 'dark' ? 'white' : '#333',
-                padding: '1.5rem',
+                padding: 'clamp(1rem, 2vw, 1.5rem)',
                 borderRadius: '12px',
                 boxShadow: theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.1)',
                 cursor: 'pointer',
@@ -229,70 +299,86 @@ const Dashboard: React.FC = () => {
               onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
               onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
               >
-                <h3 style={{ marginBottom: '0.5rem' }}>{project.name}</h3>
-                <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                <h3 style={{ 
+                  marginBottom: '0.5rem',
+                  fontSize: 'clamp(1rem, 2vw, 1.2rem)',
+                  wordBreak: 'break-word'
+                }}>{project.name}</h3>
+                <p style={{ 
+                  color: '#666', 
+                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)', 
+                  marginBottom: '1rem',
+                  wordBreak: 'break-word'
+                }}>
                   {project.description || 'No description'}
                 </p>
-                <div style={{ fontSize: '0.85rem', color: '#999', marginBottom: '1rem' }}>
+                <div style={{ 
+                  fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)', 
+                  color: '#999', 
+                  marginBottom: '1rem' 
+                }}>
                   <div>{project._count.documents} files • {project._count.members} members</div>
-                  <div>Owner: {project.owner.name}</div>
+                  <div style={{ wordBreak: 'break-word' }}>Owner: {project.owner.name}</div>
                 </div>
 
-                {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button 
-                onClick={(e) => openEditModal(project, e)}
-                style={{
-                  flex: 1,
-                  padding: '0.5rem',
-                  background: '#4caf50',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem'
-        }}
-      >
-        Edit
-      </button>
-      <button 
-        onClick={(e) => openInviteModal(project.id, e)}
-        style={{
-          flex: 1,
-          padding: '0.5rem',
-          background: '#667eea',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          fontSize: '0.85rem'
-        }}
-      >
-        Invite
-      </button>
-      <button 
-        onClick={(e) => confirmDelete(project.id, e)}
-        style={{
-          padding: '0.5rem 0.75rem',
-          background: '#f44336',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          fontSize: '0.85rem'
-        }}
-      >
-        Delete
-      </button>
-    </div>
+                {/* Action Buttons - Responsive */}
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: window.innerWidth < 480 ? '1fr 1fr' : '1fr 1fr auto',
+                  gap: '0.5rem'
+                }}>
+                  <button 
+                    onClick={(e) => openEditModal(project, e)}
+                    style={{
+                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
+                      background: '#4caf50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    onClick={(e) => openInviteModal(project.id, e)}
+                    style={{
+                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
+                      background: '#667eea',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
+                    }}
+                  >
+                    Invite
+                  </button>
+                  <button 
+                    onClick={(e) => confirmDelete(project.id, e)}
+                    style={{
+                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.6rem, 2vw, 0.75rem)',
+                      background: '#f44336',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)',
+                      gridColumn: window.innerWidth < 480 ? 'span 2' : 'auto'
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </main>
 
-      {/* Create Project Modal */}
-      {showCreateModal && (
+      {/* Responsive Modal Wrapper */}
+      {(showCreateModal || showInviteModal || showEditModal || showDeleteConfirm) && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -303,76 +389,96 @@ const Dashboard: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
-        }}
-        onClick={() => setShowCreateModal(false)}
-        >
-          <div style={{
-            background: 'white',
-            padding: '2rem',
-            borderRadius: '12px',
-            maxWidth: '500px',
-            width: '90%'
-          }}
-          onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '1.5rem' }}>Create New Project</h2>
-            <form onSubmit={handleCreateProject}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name *</label>
-                <input
-                  type="text"
-                  value={newProject.name}
-                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
+          zIndex: 1000,
+          padding: '1rem',
+          overflow: 'auto'
+        }}>
+          {/* Create Project Modal */}
+          {showCreateModal && (
+            <div style={{
+              background: theme === 'dark' ? '#2d2d2d' : 'white',
+              color: theme === 'dark' ? 'white' : '#333',
+              padding: 'clamp(1.5rem, 3vw, 2rem)',
+              borderRadius: '12px',
+              maxWidth: '500px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+            >
+              <h2 style={{ 
+                marginBottom: '1.5rem',
+                fontSize: 'clamp(1.2rem, 3vw, 1.5rem)'
+              }}>Create New Project</h2>
+              <form onSubmit={handleCreateProject}>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name *</label>
+                  <input
+                    type="text"
+                    value={newProject.name}
+                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: 'clamp(0.6rem, 2vw, 0.75rem)',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: 'clamp(0.9rem, 2vw, 1rem)',
+                      background: theme === 'dark' ? '#1e1e1e' : 'white',
+                      color: theme === 'dark' ? 'white' : '#333',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description</label>
+                  <textarea
+                    value={newProject.description}
+                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: 'clamp(0.6rem, 2vw, 0.75rem)',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: 'clamp(0.9rem, 2vw, 1rem)',
+                      resize: 'vertical',
+                      background: theme === 'dark' ? '#1e1e1e' : 'white',
+                      color: theme === 'dark' ? 'white' : '#333',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setShowCreateModal(false)} style={{
+                    padding: 'clamp(0.6rem, 2vw, 0.75rem) clamp(1rem, 3vw, 1.5rem)',
                     border: '1px solid #ddd',
                     borderRadius: '6px',
-                    fontSize: '1rem'
-                  }}
-                />
-              </div>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description</label>
-                <textarea
-                  value={newProject.description}
-                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #ddd',
+                    background: theme === 'dark' ? '#1e1e1e' : 'white',
+                    color: theme === 'dark' ? 'white' : '#333',
+                    cursor: 'pointer',
+                    fontSize: 'clamp(0.9rem, 2vw, 1rem)'
+                  }}>
+                    Cancel
+                  </button>
+                  <button type="submit" style={{
+                    padding: 'clamp(0.6rem, 2vw, 0.75rem) clamp(1rem, 3vw, 1.5rem)',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    border: 'none',
                     borderRadius: '6px',
-                    fontSize: '1rem',
-                    resize: 'vertical'
-                  }}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowCreateModal(false)} style={{
-                  padding: '0.75rem 1.5rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  background: 'white',
-                  cursor: 'pointer'
-                }}>
-                  Cancel
-                </button>
-                <button type="submit" style={{
-                  padding: '0.75rem 1.5rem',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
-                }}>
-                  Create Project
-                </button>
-              </div>
-            </form>
-          </div>
+                    cursor: 'pointer',
+                    fontSize: 'clamp(0.9rem, 2vw, 1rem)'
+                  }}>
+                    Create Project
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Other modals similar structure... */}
         </div>
       )}
 

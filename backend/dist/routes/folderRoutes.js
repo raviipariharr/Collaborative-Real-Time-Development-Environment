@@ -6,10 +6,12 @@ const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 router.use(authMiddleware_1.authMiddleware);
+// Get folder structure for a project
 router.get('/project/:projectId', async (req, res) => {
     try {
         const { projectId } = req.params;
         const userId = req.user.userId;
+        // Check access
         const hasAccess = await prisma.project.findFirst({
             where: {
                 id: projectId,
@@ -22,6 +24,7 @@ router.get('/project/:projectId', async (req, res) => {
         if (!hasAccess) {
             return res.status(403).json({ error: 'Access denied' });
         }
+        // Get all folders and documents
         const folders = await prisma.folder.findMany({
             where: { projectId },
             include: {
@@ -37,6 +40,7 @@ router.get('/project/:projectId', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch folders' });
     }
 });
+// Create folder
 router.post('/', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -44,6 +48,7 @@ router.post('/', async (req, res) => {
         if (!projectId || !name) {
             return res.status(400).json({ error: 'Project ID and name are required' });
         }
+        // Check access
         const hasAccess = await prisma.project.findFirst({
             where: {
                 id: projectId,
@@ -70,6 +75,7 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Failed to create folder' });
     }
 });
+// Rename folder
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -88,6 +94,7 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to update folder' });
     }
 });
+// Delete folder
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;

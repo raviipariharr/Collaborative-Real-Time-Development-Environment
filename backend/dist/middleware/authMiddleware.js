@@ -11,7 +11,7 @@ const authMiddleware = (req, res, next) => {
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ error: 'Access token required' });
         }
-        const token = authHeader.substring(7);
+        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
         if (!process.env.JWT_SECRET) {
             return res.status(500).json({ error: 'JWT secret not configured' });
         }
@@ -23,6 +23,7 @@ const authMiddleware = (req, res, next) => {
         next();
     }
     catch (error) {
+        // Fix: Proper error type handling
         if (error instanceof Error) {
             if (error.name === 'TokenExpiredError') {
                 return res.status(401).json({ error: 'Token expired' });

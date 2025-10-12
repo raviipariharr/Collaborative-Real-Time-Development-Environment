@@ -38,27 +38,30 @@ class AuthService {
     static async createOrUpdateUser(googleData) {
         const { sub: googleId, email, name, picture } = googleData;
         try {
+            // Check if user exists
             let user = await prisma.user.findUnique({
                 where: { googleId }
             });
             if (!user) {
+                // Create new user - handle undefined avatar properly
                 user = await prisma.user.create({
                     data: {
                         googleId,
                         email,
                         name,
-                        avatar: picture || null
+                        avatar: picture || null // Convert undefined to null
                     }
                 });
                 console.log('✅ New user created:', user.email);
             }
             else {
+                // Update existing user - handle undefined avatar properly
                 user = await prisma.user.update({
                     where: { googleId },
                     data: {
                         email,
                         name,
-                        avatar: picture || null,
+                        avatar: picture || null, // Convert undefined to null
                         updatedAt: new Date()
                     }
                 });
@@ -82,7 +85,7 @@ class AuthService {
     static async saveSession(userId, refreshToken) {
         try {
             const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + 7);
+            expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
             await prisma.session.create({
                 data: {
                     userId,

@@ -6,9 +6,9 @@
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",
     "build": "tsc",
-    "postinstall": "prisma generate"
-    "deploy": "prisma migrate deploy && npm run build"
-
+    "postinstall": "prisma generate",
+    "deploy": "prisma migrate dnpm run buildeploy && npm run build"
+    
   },
   "engines": {
     "node": "20.x"

@@ -6,6 +6,7 @@ const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 router.use(authMiddleware_1.authMiddleware);
+// Create document
 router.post('/', async (req, res) => {
     try {
         const { projectId, folderId, name, language = 'javascript' } = req.body;
@@ -27,6 +28,7 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Failed to create document' });
     }
 });
+// Add endpoint to move document to folder
 router.put('/:id/move', async (req, res) => {
     try {
         const { id } = req.params;
@@ -42,6 +44,7 @@ router.put('/:id/move', async (req, res) => {
         res.status(500).json({ error: 'Failed to move document' });
     }
 });
+// Get project documents
 router.get('/project/:projectId', async (req, res) => {
     try {
         const { projectId } = req.params;
@@ -69,6 +72,7 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to delete document' });
     }
 });
+// Rename document
 router.put('/:id/rename', async (req, res) => {
     try {
         const { id } = req.params;

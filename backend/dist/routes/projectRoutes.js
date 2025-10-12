@@ -6,6 +6,7 @@ const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 router.use(authMiddleware_1.authMiddleware);
+// Get all projects
 router.get('/', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -30,6 +31,8 @@ router.get('/', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch projects' });
     }
 });
+// Create project
+// Create project
 router.post('/', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -37,6 +40,7 @@ router.post('/', async (req, res) => {
         if (!name || name.trim().length === 0) {
             return res.status(400).json({ error: 'Project name is required' });
         }
+        // Create project and add owner as member in a transaction
         const project = await prisma.project.create({
             data: {
                 name: name.trim(),
@@ -62,6 +66,7 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Failed to create project' });
     }
 });
+// Get single project
 router.get('/:id', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -90,11 +95,13 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch project' });
     }
 });
+// Update project (rename/edit)
 router.put('/:id', async (req, res) => {
     try {
         const userId = req.user.userId;
         const projectId = req.params.id;
         const { name, description, isPublic } = req.body;
+        // Check if user is project owner
         const project = await prisma.project.findFirst({
             where: { id: projectId, ownerId: userId }
         });
@@ -121,10 +128,12 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to update project' });
     }
 });
+// Delete project
 router.delete('/:id', async (req, res) => {
     try {
         const userId = req.user.userId;
         const projectId = req.params.id;
+        // Check if user is project owner
         const project = await prisma.project.findFirst({
             where: { id: projectId, ownerId: userId }
         });

@@ -6,10 +6,12 @@ const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 router.use(authMiddleware_1.authMiddleware);
+// Get chat messages for a project
 router.get('/project/:projectId', async (req, res) => {
     try {
         const { projectId } = req.params;
         const userId = req.user.userId;
+        // Check access
         const hasAccess = await prisma.project.findFirst({
             where: {
                 id: projectId,
@@ -30,7 +32,7 @@ router.get('/project/:projectId', async (req, res) => {
                 }
             },
             orderBy: { createdAt: 'asc' },
-            take: 100
+            take: 100 // Last 100 messages
         });
         res.json(messages);
     }
@@ -39,6 +41,7 @@ router.get('/project/:projectId', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch messages' });
     }
 });
+// Send chat message
 router.post('/', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -46,6 +49,7 @@ router.post('/', async (req, res) => {
         if (!projectId || !message || message.trim().length === 0) {
             return res.status(400).json({ error: 'Project ID and message are required' });
         }
+        // Check access
         const hasAccess = await prisma.project.findFirst({
             where: {
                 id: projectId,
@@ -77,6 +81,7 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Failed to send message' });
     }
 });
+// Mark messages as read
 router.post('/mark-read', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -84,11 +89,12 @@ router.post('/mark-read', async (req, res) => {
         if (!projectId) {
             return res.status(400).json({ error: 'Project ID is required' });
         }
+        // Get all unread messages for this user in this project
         const unreadMessages = await prisma.chatMessage.findMany({
             where: {
                 projectId,
-                userId: { not: userId },
-                NOT: { readBy: { has: userId } }
+                userId: { not: userId }, // Not sent by current user
+                NOT: { readBy: { has: userId } } // Not read by current user
             }
         });
         await Promise.all(unreadMessages.map(msg => prisma.chatMessage.update({
@@ -106,6 +112,7 @@ router.post('/mark-read', async (req, res) => {
         res.status(500).json({ error: 'Failed to mark messages as read' });
     }
 });
+// Get unread count
 router.get('/unread-count/:projectId', async (req, res) => {
     try {
         const userId = req.user.userId;

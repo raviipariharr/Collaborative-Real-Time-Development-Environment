@@ -6,6 +6,7 @@ const authMiddleware_1 = require("../middleware/authMiddleware");
 const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
+// Google OAuth login
 router.post('/google', async (req, res) => {
     try {
         const { token } = req.body;
@@ -36,6 +37,7 @@ router.post('/google', async (req, res) => {
         return res.status(401).json({ error: 'Authentication failed' });
     }
 });
+// Get current user
 router.get('/me', authMiddleware_1.authMiddleware, async (req, res) => {
     try {
         const user = await prisma.user.findUnique({
@@ -58,6 +60,7 @@ router.get('/me', authMiddleware_1.authMiddleware, async (req, res) => {
         return res.status(500).json({ error: 'Failed to fetch user' });
     }
 });
+// Logout
 router.post('/logout', authMiddleware_1.authMiddleware, async (req, res) => {
     try {
         const { refreshToken } = req.body;

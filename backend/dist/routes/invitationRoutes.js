@@ -10,6 +10,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 router.use(authMiddleware_1.authMiddleware);
+// Send invitation
 router.post('/', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -17,6 +18,7 @@ router.post('/', async (req, res) => {
         if (!projectId || !email) {
             return res.status(400).json({ error: 'Project ID and email are required' });
         }
+        // Check if user owns the project or is admin
         const project = await prisma.project.findFirst({
             where: { id: projectId, ownerId: userId },
             include: { owner: true }
@@ -24,19 +26,23 @@ router.post('/', async (req, res) => {
         if (!project) {
             return res.status(403).json({ error: 'You do not have permission to invite users to this project' });
         }
+        // Check if user is already a member
         const existingMember = await prisma.projectMember.findFirst({
             where: { projectId, user: { email } }
         });
         if (existingMember) {
             return res.status(400).json({ error: 'User is already a member of this project' });
         }
+        // Check if invitation already exists
         const existingInvite = await prisma.projectInvitation.findFirst({
             where: { projectId, email, status: 'PENDING' }
         });
         if (existingInvite) {
             return res.status(400).json({ error: 'Invitation already sent to this email' });
         }
+        // Generate unique token
         const token = crypto_1.default.randomBytes(32).toString('hex');
+        // Create invitation (expires in 7 days)
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
         const invitation = await prisma.projectInvitation.create({
@@ -69,6 +75,7 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Failed to send invitation' });
     }
 });
+// Get pending invitations for current user
 router.get('/pending', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -97,6 +104,7 @@ router.get('/pending', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch invitations' });
     }
 });
+// Accept invitation
 router.post('/:id/accept', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -127,6 +135,7 @@ router.post('/:id/accept', async (req, res) => {
             });
             return res.status(400).json({ error: 'Invitation has expired' });
         }
+        // Add user as project member
         await prisma.projectMember.create({
             data: {
                 projectId: invitation.projectId,
@@ -134,6 +143,7 @@ router.post('/:id/accept', async (req, res) => {
                 role: invitation.role
             }
         });
+        // Mark invitation as accepted
         await prisma.projectInvitation.update({
             where: { id: invitationId },
             data: { status: 'ACCEPTED' }
@@ -148,6 +158,7 @@ router.post('/:id/accept', async (req, res) => {
         res.status(500).json({ error: 'Failed to accept invitation' });
     }
 });
+// Reject invitation
 router.post('/:id/reject', async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -175,10 +186,12 @@ router.post('/:id/reject', async (req, res) => {
         res.status(500).json({ error: 'Failed to reject invitation' });
     }
 });
+// Get invitations sent for a project (for project owners)
 router.get('/project/:projectId', async (req, res) => {
     try {
         const userId = req.user.userId;
         const projectId = req.params.projectId;
+        // Check if user owns the project
         const project = await prisma.project.findFirst({
             where: { id: projectId, ownerId: userId }
         });

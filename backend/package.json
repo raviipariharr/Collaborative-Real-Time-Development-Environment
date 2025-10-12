@@ -7,7 +7,7 @@
     "dev": "nodemon src/app.ts",
     "build": "tsc",
     "postinstall": "prisma generate",
-    "deploy": "prisma migrate dnpm run buildeploy && npm run build"
+    "deploy": "npm run build && npx prisma migrate deploy"
     
   },
   "engines": {

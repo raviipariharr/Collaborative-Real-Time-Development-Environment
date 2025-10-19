@@ -348,7 +348,7 @@ const FileTree: React.FC<FileTreeProps> = ({
               </button>
               <button
                 onClick={() => {
-                  if (confirm('Delete this folder and all its contents?')) {
+                  if (window.confirm('Delete this folder and all its contents?')) {
                     onDeleteFolder(contextMenu.id!);
                   }
                   closeContextMenu();
@@ -406,7 +406,7 @@ const FileTree: React.FC<FileTreeProps> = ({
     </button>
     <button
       onClick={() => {
-        if (confirm('Delete this file?')) {
+        if (window.confirm('Delete this file?')) {
           onDeleteFile(contextMenu.id!);
         }
         closeContextMenu();

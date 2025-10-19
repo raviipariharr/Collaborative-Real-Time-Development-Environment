@@ -27,10 +27,28 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
   const [unreadCount, setUnreadCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+
+  const loadMessages = async () => {
+    try {
+      const data = await apiService.getProjectMessages(projectId);
+      setMessages(data);
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+    }
+  };
+
+  const loadUnreadCount = async () => {
+    try {
+      const data = await apiService.getUnreadCount(projectId);
+      setUnreadCount(data.unreadCount);
+    } catch (error) {
+      console.error('Failed to load unread count:', error);
+    }
+  };
+
   useEffect(() => {
     loadMessages();
     loadUnreadCount();
-    
     // Poll for unread count every 10 seconds when chat is closed
     const interval = setInterval(() => {
       if (!isOpen) {
@@ -39,7 +57,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [projectId, isOpen]);
+  }, [projectId, isOpen,loadMessages,loadUnreadCount]);
 
   useEffect(() => {
     if (socket && projectId) {
@@ -60,36 +78,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     }
   }, [socket, projectId, isOpen, currentUserId]);
 
+   const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages,scrollToBottom]);
 
   // Mark messages as read when chat is opened
-  useEffect(() => {
-    if (isOpen && unreadCount > 0) {
-      markAsRead();
-    }
-  }, [isOpen]);
-
-  const loadMessages = async () => {
-    try {
-      const data = await apiService.getProjectMessages(projectId);
-      setMessages(data);
-    } catch (error) {
-      console.error('Failed to load messages:', error);
-    }
-  };
-
-  const loadUnreadCount = async () => {
-    try {
-      const data = await apiService.getUnreadCount(projectId);
-      setUnreadCount(data.unreadCount);
-    } catch (error) {
-      console.error('Failed to load unread count:', error);
-    }
-  };
-
-  const markAsRead = async () => {
+const markAsRead = async () => {
     try {
       await apiService.markMessagesAsRead(projectId);
       setUnreadCount(0);
@@ -97,10 +95,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
       console.error('Failed to mark as read:', error);
     }
   };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  
+  useEffect(() => {
+    if (isOpen && unreadCount > 0) {
+      markAsRead();
+    }
+  }, [isOpen,markAsRead,unreadCount]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -73,7 +73,37 @@ const EditorPage: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [showSidebar]);
+  const loadProject = async () => {
+    try {
+      const data = await apiService.getProject(projectId!);
+      setProject(data);
+    } catch (error) {
+      console.error('Failed to load project:', error);
+    }
+  };
 
+  const loadDocuments = async () => {
+    try {
+      const data = await apiService.getProjectDocuments(projectId!);
+      setDocuments(data);
+      if (data.length > 0 && !selectedDoc) {
+        setSelectedDoc(data[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load documents:', error);
+    }
+  };
+
+  const loadFolders = async () => {
+    try {
+      const data = await apiService.getFolders(projectId!);
+      setFolders(data);
+    } catch (error) {
+      console.error('Failed to load folders:', error);
+    }
+  };
+  
+  
   // Load project data
   useEffect(() => {
     if (projectId) {
@@ -81,7 +111,7 @@ const EditorPage: React.FC = () => {
       loadDocuments();
       loadFolders();
     }
-  }, [projectId]);
+  }, [projectId,loadProject, loadDocuments, loadFolders]);
 
   // WebSocket connection
   useEffect(() => {
@@ -119,36 +149,6 @@ const EditorPage: React.FC = () => {
       };
     }
   }, [selectedDoc, state.user]);
-
-  const loadProject = async () => {
-    try {
-      const data = await apiService.getProject(projectId!);
-      setProject(data);
-    } catch (error) {
-      console.error('Failed to load project:', error);
-    }
-  };
-
-  const loadDocuments = async () => {
-    try {
-      const data = await apiService.getProjectDocuments(projectId!);
-      setDocuments(data);
-      if (data.length > 0 && !selectedDoc) {
-        setSelectedDoc(data[0]);
-      }
-    } catch (error) {
-      console.error('Failed to load documents:', error);
-    }
-  };
-
-  const loadFolders = async () => {
-    try {
-      const data = await apiService.getFolders(projectId!);
-      setFolders(data);
-    } catch (error) {
-      console.error('Failed to load folders:', error);
-    }
-  };
 
   const handleCreateFile = async (e: React.FormEvent) => {
     e.preventDefault();

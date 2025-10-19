@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef ,useCallback } from 'react';
 import { Socket } from 'socket.io-client';
 import { apiService } from '../services/api';
-
 interface Message {
   id: string;
   message: string;
@@ -28,23 +27,23 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     try {
       const data = await apiService.getProjectMessages(projectId);
       setMessages(data);
     } catch (error) {
       console.error('Failed to load messages:', error);
     }
-  };
+  },[projectId]);
 
-  const loadUnreadCount = async () => {
+  const loadUnreadCount = useCallback(async () => {
     try {
       const data = await apiService.getUnreadCount(projectId);
       setUnreadCount(data.unreadCount);
     } catch (error) {
       console.error('Failed to load unread count:', error);
     }
-  };
+  },[projectId]);
 
   useEffect(() => {
     loadMessages();
@@ -77,24 +76,24 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
       };
     }
   }, [socket, projectId, isOpen, currentUserId]);
-
-   const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, [messagesEndRef]);
+
 
   useEffect(() => {
     scrollToBottom();
   }, [messages,scrollToBottom]);
 
   // Mark messages as read when chat is opened
-const markAsRead = async () => {
+  const markAsRead = useCallback(async () => {
     try {
       await apiService.markMessagesAsRead(projectId);
       setUnreadCount(0);
     } catch (error) {
       console.error('Failed to mark as read:', error);
     }
-  };
+  },[projectId]);
   
   useEffect(() => {
     if (isOpen && unreadCount > 0) {

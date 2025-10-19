@@ -7,7 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import io, { Socket } from 'socket.io-client';
 import ChatPanel from '../components/ChatPanel';
 import FileTree from '../components/FileTree';
-
+import { useCallback } from 'react';
 const SOCKET_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 interface Document {
@@ -73,16 +73,17 @@ const EditorPage: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [showSidebar]);
-  const loadProject = async () => {
+
+  const loadProject = useCallback(async () => {
     try {
       const data = await apiService.getProject(projectId!);
       setProject(data);
     } catch (error) {
       console.error('Failed to load project:', error);
     }
-  };
+  }, [projectId]) ;
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       const data = await apiService.getProjectDocuments(projectId!);
       setDocuments(data);
@@ -92,18 +93,18 @@ const EditorPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to load documents:', error);
     }
-  };
+  }, [projectId]);
 
-  const loadFolders = async () => {
+  const loadFolders = useCallback(async () => {
     try {
       const data = await apiService.getFolders(projectId!);
       setFolders(data);
     } catch (error) {
       console.error('Failed to load folders:', error);
     }
-  };
+  }, [projectId]);
   
-  
+
   // Load project data
   useEffect(() => {
     if (projectId) {

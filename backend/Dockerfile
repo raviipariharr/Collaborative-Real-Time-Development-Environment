@@ -1,27 +1,32 @@
+# Use official Node.js Alpine image
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Install OpenSSL
+# Install OpenSSL (required for Prisma)
 RUN apk add --no-cache openssl
 
-# Copy package files
+# Copy package files and Prisma schema first
 COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install dependencies
 RUN npm ci
 
+# Copy the rest of your app
+COPY . .
+
+# Fix permission issue for Prisma CLI binary
+RUN chmod +x ./node_modules/.bin/prisma
+
 # Generate Prisma Client
 RUN npx prisma generate
-
-# Copy source code
-COPY . .
 
 # Build TypeScript
 RUN npm run build
 
+# Expose app port
 EXPOSE 3001
 
-# Run migrations and start
+# Run migrations and start the app
 CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

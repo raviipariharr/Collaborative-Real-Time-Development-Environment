@@ -93,7 +93,7 @@ const EditorPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to load documents:', error);
     }
-  }, [projectId]);
+  }, [projectId,selectedDoc]);
 
   const loadFolders = useCallback(async () => {
     try {

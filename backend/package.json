@@ -5,11 +5,11 @@
   "scripts": {
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",
-    "build": "npx run  prisma :generate && tsc ",
+    "build": "run prisma generate && tsc ",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "deploy": "npm run build && npx prisma migrate deploy"
+    "deploy": "npx prisma migrate deploy"
     
   },
   "engines": {

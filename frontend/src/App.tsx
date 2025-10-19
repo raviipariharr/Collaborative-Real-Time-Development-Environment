@@ -35,7 +35,13 @@ function App() {
   const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 
   if (!GOOGLE_CLIENT_ID) {
-    return <div style={{ padding: '2rem' }}>Please set REACT_APP_GOOGLE_CLIENT_ID in your .env file</div>;
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <h2>Configuration Error</h2>
+        <p>Google Client ID is missing. Please check environment variables.</p>
+        <p>Current: {GOOGLE_CLIENT_ID}</p>
+      </div>
+    );
   }
 
   return (

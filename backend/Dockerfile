@@ -1,4 +1,3 @@
-# Use official Node.js Alpine image
 FROM node:18-alpine
 
 WORKDIR /app
@@ -16,8 +15,8 @@ RUN npm ci
 # Copy the rest of your app
 COPY . .
 
-# Fix permission issue for Prisma CLI binary
-RUN chmod +x ./node_modules/.bin/prisma
+# Fix permission issues for binaries
+RUN chmod +x ./node_modules/.bin/prisma && chmod +x ./node_modules/.bin/tsc
 
 # Generate Prisma Client
 RUN npx prisma generate

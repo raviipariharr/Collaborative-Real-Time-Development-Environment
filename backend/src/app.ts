@@ -48,10 +48,18 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://accounts.google.com',
   'https://www.google.com'
-].filter((origin): origin is string => !!origin); // removes undefined, asserts type is string
+].filter((origin): origin is string => !!origin);
 
 app.use(cors({
   origin: allowedOrigins,
+  methods: ['GET', 'POST', 'OPTIONS'], // allow OPTIONS
+  credentials: true
+}));
+
+// Handle preflight OPTIONS requests for all routes
+app.options('*', cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true
 }));
 

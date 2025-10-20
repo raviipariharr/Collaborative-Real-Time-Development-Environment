@@ -27,28 +27,31 @@ const prisma = new PrismaClient({
 const app = express();
 const server = createServer(app);
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'https://accounts.google.com',
+  'https://www.google.com'
+].filter((origin): origin is string => !!origin);
 
+export const io = new SocketIOServer(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
 
 // Middleware
 app.use(helmet({ crossOriginEmbedderPolicy: false }));
 app.use(compression());
 app.use(morgan('combined'));
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : [process.env.FRONTEND_URL || 'http://localhost:3000'];
+
 
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'OPTIONS'], // allow OPTIONS
   credentials: true
 }));
 
@@ -59,13 +62,6 @@ app.options('*', cors({
   credentials: true
 }));
 
-export const io = new SocketIOServer(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -187,21 +183,21 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 
-const startServer = async () => {
+server.listen(PORT, async () => {
+  console.log('\n🚀 CodeCollab Backend with Authentication!');
+  console.log(`📍 Server: http://localhost:${PORT}`);
+  console.log(`📊 Health: http://localhost:${PORT}/health`);
+  console.log(`🔐 Auth: http://localhost:${PORT}/api/auth/`);
+  
+  // Test database connection
   try {
     await prisma.$connect();
-    const PORT = process.env.PORT || 3001;
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
+    console.log('✅ Database connected');
   } catch (error) {
-    console.error('❌ Database connection failed:', error);
-    process.exit(1); // stops crash immediately, Railway will see failed deployment
+    console.error('❌ Database connection failed');
   }
-};
-
-startServer();
-
-
+  
+  console.log('✅ Ready for connections!\n');
+});
 
 export default app;

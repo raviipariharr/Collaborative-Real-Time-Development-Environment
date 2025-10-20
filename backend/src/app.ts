@@ -8,33 +8,33 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
+
+// Import routes
+import authRoutes from './routes/authRoutes';
 import projectRoutes from './routes/projectRoutes';
 import documentRoutes from './routes/documentRoutes';
 import invitationRoutes from './routes/invitationRoutes';
 import chatRoutes from './routes/chatRoutes';
-import authRoutes from './routes/authRoutes';
 import folderRoutes from './routes/folderRoutes';
 
-
-
+// Load environment variables
 dotenv.config();
 
 // Initialize Prisma
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-});
+const prisma = new PrismaClient();
 
 const app = express();
 const server = createServer(app);
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'http://localhost:3000',
-  'https://accounts.google.com',
-  'https://www.google.com'
-].filter((origin): origin is string => !!origin);
+// CORS configuration for production
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [process.env.FRONTEND_URL || 'http://localhost:3000'];
 
-export const io = new SocketIOServer(server, {
+console.log('Allowed CORS origins:', allowedOrigins);
+
+// Initialize Socket.IO with CORS
+const io = new SocketIOServer(server, {
   cors: {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
@@ -43,38 +43,42 @@ export const io = new SocketIOServer(server, {
 });
 
 // Middleware
-app.use(helmet({ crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: false
+}));
+
 app.use(compression());
 app.use(morgan('combined'));
 
-
-
+// CORS with dynamic origin checking
 app.use(cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'OPTIONS'], // allow OPTIONS
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      console.warn('Blocked by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
-
-// Handle preflight OPTIONS requests for all routes
-app.options('*', cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  credentials: true
-}));
-
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
   message: { error: 'Too many requests' }
 });
 app.use('/api/', limiter);
 
-// Routes
+// Health check endpoint
 app.get('/health', async (req, res) => {
   try {
     await prisma.$connect();
@@ -84,20 +88,36 @@ app.get('/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       database: 'Connected',
-      users: userCount
+      users: userCount,
+      environment: process.env.NODE_ENV || 'development'
     });
   } catch (error) {
-    res.json({
-      status: 'OK',
+    res.status(500).json({
+      status: 'ERROR',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
-      database: 'Disconnected'
+      database: 'Disconnected',
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
+// Root endpoint
 app.get('/', (req, res) => {
-  res.json({ message: 'CodeCollab Backend with Authentication!' });
+  res.json({ 
+    message: 'CodeCollab Backend API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      projects: '/api/projects',
+      documents: '/api/documents',
+      folders: '/api/folders',
+      invitations: '/api/invitations',
+      chat: '/api/chat'
+    }
+  });
 });
 
 // API Routes
@@ -108,8 +128,16 @@ app.use('/api/invitations', invitationRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/folders', folderRoutes);
 
-// Socket.IO
-// Update the Socket.IO connection handling section
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({ 
+    error: err.message || 'Something went wrong!',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
@@ -134,25 +162,10 @@ io.on('connection', (socket) => {
       users: sockets.map(s => ({ socketId: s.id }))
     });
   });
-
-  // Handle chat messages
-  socket.on('send-chat-message', (data: { projectId: string; message: any }) => {
-    const { projectId, message } = data;
-    
-    // Broadcast chat message to everyone in the project
-    io.to(projectId).emit('new-chat-message', message);
-  });
-  
-  socket.on('join-project-chat', (projectId: string) => {
-    socket.join(projectId);
-    console.log(`Socket ${socket.id} joined project chat ${projectId}`);
-  });
   
   // Handle code changes
   socket.on('code-change', (data: { documentId: string; code: string; userId: string }) => {
     const { documentId, code, userId } = data;
-    
-    // Broadcast to others in the same document (exclude sender)
     socket.to(documentId).emit('code-update', {
       code,
       userId,
@@ -163,7 +176,6 @@ io.on('connection', (socket) => {
   // Handle cursor position changes
   socket.on('cursor-change', (data: { documentId: string; position: any; userId: string; userName: string }) => {
     const { documentId, position, userId, userName } = data;
-    
     socket.to(documentId).emit('cursor-update', {
       userId,
       userName,
@@ -172,32 +184,61 @@ io.on('connection', (socket) => {
     });
   });
   
+  // Handle chat messages
+  socket.on('send-chat-message', (data: { projectId: string; message: any }) => {
+    const { projectId, message } = data;
+    io.to(projectId).emit('new-chat-message', message);
+  });
+  
+  socket.on('join-project-chat', (projectId: string) => {
+    socket.join(projectId);
+    console.log(`Socket ${socket.id} joined project chat ${projectId}`);
+  });
+  
   // Handle disconnect
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
-    
-    // Notify all rooms this socket was in
     socket.broadcast.emit('user-left', { socketId: socket.id });
   });
 });
 
 const PORT = process.env.PORT || 3001;
 
+// Start server
 server.listen(PORT, async () => {
-  console.log('\n🚀 CodeCollab Backend with Authentication!');
+  console.log('\n🚀 CodeCollab Backend Server Started!');
   console.log(`📍 Server: http://localhost:${PORT}`);
+  console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
   console.log(`📊 Health: http://localhost:${PORT}/health`);
-  console.log(`🔐 Auth: http://localhost:${PORT}/api/auth/`);
   
   // Test database connection
   try {
     await prisma.$connect();
     console.log('✅ Database connected');
   } catch (error) {
-    console.error('❌ Database connection failed');
+    console.error('❌ Database connection failed:', error);
   }
   
-  console.log('✅ Ready for connections!\n');
+  console.log('\n✅ Ready for connections!\n');
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  await prisma.$disconnect();
+  server.close(() => {
+    console.log('Process terminated');
+  });
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  await prisma.$disconnect();
+  server.close(() => {
+    console.log('Process terminated');
+  });
 });
 
 export default app;
+export { io, prisma };

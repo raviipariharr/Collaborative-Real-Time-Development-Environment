@@ -72,6 +72,16 @@ app.get('/health', async (req, res) => {
 app.get('/', (req, res) => {
     res.json({ message: 'CodeCollab Backend with Authentication!' });
 });
+
+app.get('*', (req, res) => {
+  res.send('Not Found');
+});
+
+// For any method
+app.all('*', (req, res) => {
+  res.status(404).send('Not Found');
+});
+
 // API Routes
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/projects', projectRoutes_1.default);

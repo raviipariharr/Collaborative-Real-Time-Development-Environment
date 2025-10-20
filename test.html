@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test OAuth</title>
+  <script src="https://accounts.google.com/gsi/client"></script>
+</head>
+<body>
+  <h1>Test Google OAuth</h1>
+  <div id="g_id_onload"
+       data-client_id= 631092568811-68nr3n759gejoc7jo616i6k5hp7gm5od.apps.googleusercontent.com
+       data-callback="handleCredentialResponse">
+  </div>
+  <div class="g_id_signin" data-type="standard"></div>
+
+  <script>
+    function handleCredentialResponse(response) {
+      console.log("Google token:", response.credential);
+      
+      // Test backend
+      fetch('https://codecollab-backend.up.railway.app/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: response.credential })
+      })
+      .then(res => res.json())
+      .then(data => {
+        console.log('Backend response:', data);
+        alert('Success! Check console');
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        alert('Error! Check console');
+      });
+    }
+  </script>
+</body>
+</html>

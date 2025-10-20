@@ -185,21 +185,18 @@ const PORT = process.env.PORT || 3001;
 const startServer = async () => {
   try {
     await prisma.$connect();
-    console.log('✅ Database connected');
-
+    const PORT = process.env.PORT || 3001;
     server.listen(PORT, () => {
-      console.log('\n🚀 CodeCollab Backend with Authentication!');
-      console.log(`📍 Server: http://localhost:${PORT}`);
-      console.log(`📊 Health: http://localhost:${PORT}/health`);
-      console.log(`🔐 Auth: http://localhost:${PORT}/api/auth/`);
-      console.log('✅ Ready for connections!\n');
+      console.log(`🚀 Server running on port ${PORT}`);
     });
   } catch (error) {
     console.error('❌ Database connection failed:', error);
-    process.exit(1); // stop server if DB cannot connect
+    process.exit(1); // stops crash immediately, Railway will see failed deployment
   }
 };
+
 startServer();
+
 
 
 export default app;

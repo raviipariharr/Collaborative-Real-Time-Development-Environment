@@ -34,16 +34,21 @@ app.use(helmet({ crossOriginEmbedderPolicy: false }));
 app.use(compression());
 app.use(morgan('combined'));
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'http://localhost:3000',
-  'https://accounts.google.com',
-  'https://www.google.com'
-].filter((origin): origin is string => !!origin);
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [process.env.FRONTEND_URL || 'http://localhost:3000'];
 
 app.use(cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'OPTIONS'], // allow OPTIONS
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
@@ -54,10 +59,10 @@ app.options('*', cors({
   credentials: true
 }));
 
-const io = new SocketIOServer(server, {
+export const io = new SocketIOServer(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ['GET', 'POST','OPTIONS'],
+    methods: ['GET', 'POST'],
     credentials: true
   }
 });

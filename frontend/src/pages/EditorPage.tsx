@@ -122,7 +122,6 @@ const EditorPage: React.FC = () => {
 
   // WebSocket connection
   // eslint-disable-next-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     if (selectedDoc && state.user) {
       socketRef.current = io(SOCKET_URL);

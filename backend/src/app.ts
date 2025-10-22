@@ -167,6 +167,7 @@ io.on('connection', (socket) => {
   socket.on('code-change', (data: { documentId: string; code: string; userId: string }) => {
     const { documentId, code, userId } = data;
     socket.to(documentId).emit('code-update', {
+      documentId,
       code,
       userId,
       timestamp: Date.now()

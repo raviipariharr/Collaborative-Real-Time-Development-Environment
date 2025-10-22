@@ -4,7 +4,7 @@ import Editor from '@monaco-editor/react';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import io, { Socket } from 'socket.io-client';
+import io from 'socket.io-client';
 import ChatPanel from '../components/ChatPanel';
 import FileTree from '../components/FileTree';
 import { useCallback } from 'react';
@@ -45,7 +45,8 @@ const EditorPage: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
-  const [code, setCode] = useState('// Start coding here...\n');
+  const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
+
 
   // Modals
   const [showNewFile, setShowNewFile] = useState(false);
@@ -56,9 +57,14 @@ const EditorPage: React.FC = () => {
 
   // Real-time
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
-  const socketRef = useRef<Socket | null>(null);
+ const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const editorRef = useRef<any>(null);
   const isRemoteChange = useRef(false);
+
+  const getCurrentContent = () => {
+  if (!selectedDoc) return '';
+  return fileContents.get(selectedDoc.id) || '// Start coding here...\n';
+};
 
   // Handle window resize
   useEffect(() => {
@@ -138,18 +144,53 @@ const EditorPage: React.FC = () => {
         setActiveUsers(prev => prev.filter(u => u.socketId !== data.socketId));
       });
 
-      socket.on('code-update', (data: { code: string; userId: string }) => {
-        if (data.userId !== state.user?.id) {
-          isRemoteChange.current = true;
-          setCode(data.code);
-        }
-      });
+      socket.on('code-update', (data: { code: string; userId: string; documentId: string }) => {
+        if (!state.user || data.userId === state.user.id) return; // ignore self updates
+    
+
+    isRemoteChange.current = true;
+
+    // Update content only for that documentId
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(data.documentId, data.code);
+      return newMap;
+    });
+  });
 
       return () => {
         socket.disconnect();
       };
     }
   }, [selectedDoc, state.user]);
+
+  useEffect(() => {
+    if (selectedDoc) {
+      if (!fileContents.has(selectedDoc.id)) {
+        setFileContents(prev => {
+          const newMap = new Map(prev);
+          newMap.set(selectedDoc.id, '// Start coding here...\n');
+          return newMap;
+        });
+      }
+    }
+  }, [selectedDoc?.id]);
+
+  useEffect(() => {
+  if (selectedDoc) {
+    // If we don't have content for this file yet, load it
+    if (!fileContents.has(selectedDoc.id)) {
+      // In a real app, you'd fetch from backend
+      // For now, initialize with default content
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(selectedDoc.id, '// Start coding here...\n');
+        return newMap;
+      });
+    }
+  }
+}, [selectedDoc]);
+
 
   const handleCreateFile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,36 +272,53 @@ const EditorPage: React.FC = () => {
   };
 
   const handleEditorChange = (value: string | undefined) => {
-    if (!value) return;
+  if (!value || !selectedDoc) return;
+  
+  if (!isRemoteChange.current) {
+    // Update content for current file only
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.set(selectedDoc.id, value);
+      return newMap;
+    });
     
-    if (!isRemoteChange.current) {
-      setCode(value);
-      
-      if (socketRef.current && selectedDoc && state.user) {
-        socketRef.current.emit('code-change', {
-          documentId: selectedDoc.id,
-          code: value,
-          userId: state.user.id
-        });
-      }
-    } else {
-      isRemoteChange.current = false;
+    // Emit code change to other users
+    if (socketRef.current && state.user) {
+      socketRef.current.emit('code-change', {
+        documentId: selectedDoc.id,
+        code: value,
+        userId: state.user.id
+      });
     }
-  };
+  } else {
+    isRemoteChange.current = false;
+  }
+};
 
-  const handleDeleteFile = async (fileId: string) => {
-    try {
-      await apiService.deleteDocument(fileId);
-      setDocuments(documents.filter(d => d.id !== fileId));
-      if (selectedDoc?.id === fileId) {
-        setSelectedDoc(null);
-        setCode('// Start coding here...\n');
-      }
-    } catch (error) {
-      console.error('Failed to delete file:', error);
+
+ const handleDeleteFile = async (fileId: string) => {
+  try {
+    // Delete on backend
+    await apiService.deleteDocument(fileId);
+
+    // Remove from local documents list
+    setDocuments(prev => prev.filter(d => d.id !== fileId));
+
+    // Remove the deleted file from the fileContents map
+    setFileContents(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(fileId);
+      return newMap;
+    });
+
+    // If the deleted file was currently selected, clear selection
+    if (selectedDoc?.id === fileId) {
+      setSelectedDoc(null);
     }
-  };
-
+  } catch (error) {
+    console.error('Failed to delete file:', error);
+  }
+};
   const handleSelectDoc = (doc: Document) => {
     setSelectedDoc(doc);
     if (isMobile) {
@@ -509,7 +567,7 @@ const EditorPage: React.FC = () => {
             defaultLanguage={selectedDoc?.language || 'javascript'}
             language={selectedDoc?.language || 'javascript'}
             theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
-            value={code}
+             value={getCurrentContent()}
             onChange={handleEditorChange}
             onMount={(editor) => {
               editorRef.current = editor;

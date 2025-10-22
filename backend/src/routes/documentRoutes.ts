@@ -104,4 +104,20 @@ router.put('/:id/rename', async (req: AuthRequest, res) => {
   }
 });
 
+// Save document content
+router.put('/:id/content', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+
+    // You might want to add a content field to Document model
+    // For now, you could store in a separate table or file system
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving content:', error);
+    res.status(500).json({ error: 'Failed to save content' });
+  }
+});
+
 export default router;

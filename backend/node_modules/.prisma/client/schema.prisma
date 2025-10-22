@@ -62,6 +62,7 @@ model Document {
   projectId String
   name      String
   language  String   @default("javascript")
+  content   String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   folderId  String?

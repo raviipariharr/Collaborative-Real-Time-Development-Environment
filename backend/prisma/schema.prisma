@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
-    binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,41 +9,37 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  googleId  String   @unique
-  email     String   @unique
-  name      String
-  avatar    String?
-  role      UserRole @default(EDITOR)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  ownedProjects    Project[]          @relation("ProjectOwner")
-  projectMembers   ProjectMember[]
-  sessions         Session[]
-  sentInvitations  ProjectInvitation[] @relation("SentInvitations") 
-  chatMessages ChatMessage[]
+  id              String              @id @default(cuid())
+  googleId        String              @unique
+  email           String              @unique
+  name            String
+  avatar          String?
+  role            UserRole            @default(EDITOR)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  chatMessages    ChatMessage[]
+  sentInvitations ProjectInvitation[] @relation("SentInvitations")
+  projectMembers  ProjectMember[]
+  ownedProjects   Project[]           @relation("ProjectOwner")
+  sessions        Session[]
 
   @@map("users")
 }
 
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  isPublic    Boolean  @default(false)
-  ownerId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  owner       User              @relation("ProjectOwner", fields: [ownerId], references: [id])
-  members     ProjectMember[]
-  documents   Document[]
-  invitations ProjectInvitation[]
+  id           String              @id @default(cuid())
+  name         String
+  description  String?
+  isPublic     Boolean             @default(false)
+  ownerId      String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
   chatMessages ChatMessage[]
-  folders Folder[]  
+  documents    Document[]
+  folders      Folder[]
+  invitations  ProjectInvitation[]
+  members      ProjectMember[]
+  owner        User                @relation("ProjectOwner", fields: [ownerId], references: [id])
 
   @@map("projects")
 }
@@ -54,10 +50,8 @@ model ProjectMember {
   userId    String
   role      ProjectRole @default(EDITOR)
   joinedAt  DateTime    @default(now())
-
-  // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
   @@map("project_members")
@@ -66,15 +60,13 @@ model ProjectMember {
 model Document {
   id        String   @id @default(cuid())
   projectId String
-  folderId  String?
   name      String
   language  String   @default("javascript")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  folder  Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folderId  String?
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("documents")
 }
@@ -85,27 +77,23 @@ model Session {
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
 }
 
 model ProjectInvitation {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   projectId String
   email     String
-  role      ProjectRole @default(EDITOR)
+  role      ProjectRole      @default(EDITOR)
   invitedBy String
   status    InvitationStatus @default(PENDING)
-  token     String   @unique
+  token     String           @unique
   expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  inviter User    @relation("SentInvitations", fields: [invitedBy], references: [id])
+  createdAt DateTime         @default(now())
+  inviter   User             @relation("SentInvitations", fields: [invitedBy], references: [id])
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, email])
   @@map("project_invitations")
@@ -118,27 +106,23 @@ model ChatMessage {
   message   String
   createdAt DateTime @default(now())
   readBy    String[] @default([])
-  
-  // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("chat_messages")
 }
 
 model Folder {
-  id          String   @id @default(cuid())
-  name        String
-  projectId   String
-  parentId    String?  // null for root folders
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id        String     @id @default(cuid())
+  name      String
+  projectId String
+  parentId  String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  documents Document[]
   parent    Folder?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children  Folder[]   @relation("FolderHierarchy")
-  documents Document[]
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("folders")
 }
@@ -162,4 +146,3 @@ enum InvitationStatus {
   REJECTED
   EXPIRED
 }
-

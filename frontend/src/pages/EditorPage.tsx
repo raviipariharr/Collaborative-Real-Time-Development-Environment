@@ -121,6 +121,7 @@ const EditorPage: React.FC = () => {
   }, [projectId,loadProject, loadDocuments, loadFolders]);
 
   // WebSocket connection
+  // eslint-disable-next-line react-hooks/exhaustive-depss
   useEffect(() => {
     if (selectedDoc && state.user) {
       socketRef.current = io(SOCKET_URL);
@@ -162,7 +163,7 @@ const EditorPage: React.FC = () => {
         socket.disconnect();
       };
     }
-  }, [selectedDoc, state.user]);
+  }, [selectedDoc, state.user]); 
 
   useEffect(() => {
     if (selectedDoc) {
@@ -189,7 +190,7 @@ const EditorPage: React.FC = () => {
       });
     }
   }
-}, [selectedDoc]);
+}, [selectedDoc,fileContents]);
 
 
   const handleCreateFile = async (e: React.FormEvent) => {

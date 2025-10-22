@@ -121,7 +121,8 @@ const EditorPage: React.FC = () => {
   }, [projectId,loadProject, loadDocuments, loadFolders]);
 
   // WebSocket connection
-  // eslint-disable-next-line react-hooks/exhaustive-depss
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (selectedDoc && state.user) {
       socketRef.current = io(SOCKET_URL);

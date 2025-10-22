@@ -122,7 +122,6 @@ const EditorPage: React.FC = () => {
 
   // WebSocket connection
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     if (selectedDoc && state.user) {
       socketRef.current = io(SOCKET_URL);
       const socket = socketRef.current;
@@ -163,7 +162,7 @@ const EditorPage: React.FC = () => {
         socket.disconnect();
       };
     }
-  }, [selectedDoc, state.user]); 
+  }, [selectedDoc, state.user,fileContents]); 
 
   useEffect(() => {
     if (selectedDoc) {

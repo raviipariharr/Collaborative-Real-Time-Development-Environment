@@ -166,16 +166,17 @@ const EditorPage: React.FC = () => {
   }, [selectedDoc, state.user,]); 
 
   useEffect(() => {
-    if (selectedDoc) {
-      if (!fileContents.has(selectedDoc.id)) {
-        setFileContents(prev => {
-          const newMap = new Map(prev);
-          newMap.set(selectedDoc.id, '// Start coding here...\n');
-          return newMap;
-        });
-      }
+  if (!selectedDoc) return;
+
+  setFileContents(prev => {
+    if (!prev.has(selectedDoc.id)) {
+      const newMap = new Map(prev);
+      newMap.set(selectedDoc.id, '// Start coding here...\n');
+      return newMap;
     }
-  }, [selectedDoc?.id]);
+    return prev;
+  });
+}, [selectedDoc]);
 
   useEffect(() => {
   if (selectedDoc) {

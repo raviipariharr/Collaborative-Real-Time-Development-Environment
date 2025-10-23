@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { apiService } from '../services/api';
@@ -7,7 +7,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import io from 'socket.io-client';
 import ChatPanel from '../components/ChatPanel';
 import FileTree from '../components/FileTree';
-import { useCallback } from 'react';
 const SOCKET_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 interface Document {
@@ -15,6 +14,7 @@ interface Document {
   name: string;
   language: string;
   folderId: string | null;
+  content: string;
 }
 
 interface Folder {
@@ -57,14 +57,18 @@ const EditorPage: React.FC = () => {
 
   // Real-time
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
- const socketRef = useRef<ReturnType<typeof io> | null>(null);
+  const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const editorRef = useRef<any>(null);
   const isRemoteChange = useRef(false);
 
+  //saving 
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const getCurrentContent = () => {
-  if (!selectedDoc) return '';
-  return fileContents.get(selectedDoc.id) || '// Start coding here...\n';
-};
+    if (!selectedDoc) return '';
+    return fileContents.get(selectedDoc.id) || '// Start coding here...\n';
+  };
 
   // Handle window resize
   useEffect(() => {
@@ -87,19 +91,41 @@ const EditorPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to load project:', error);
     }
-  }, [projectId]) ;
+  }, [projectId]);
 
   const loadDocuments = useCallback(async () => {
     try {
       const data = await apiService.getProjectDocuments(projectId!);
       setDocuments(data);
+
+      // Initialize file contents from loaded documents
+      const newContents = new Map<string, string>();
+      data.forEach((doc: Document) => {
+        newContents.set(doc.id, doc.content || '// Start coding here...\n');
+      });
+      setFileContents(newContents);
+
       if (data.length > 0 && !selectedDoc) {
         setSelectedDoc(data[0]);
       }
     } catch (error) {
       console.error('Failed to load documents:', error);
     }
-  }, [projectId,selectedDoc]);
+  }, [projectId, selectedDoc]);
+
+  const saveContent = useCallback(async (docId: string, content: string) => {
+    try {
+      setIsSaving(true);
+      await apiService.saveDocumentContent(docId, content);
+      setLastSaved(new Date());
+      console.log('Content saved for document:', docId);
+    } catch (error) {
+      console.error('Failed to save content:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
 
   const loadFolders = useCallback(async () => {
     try {
@@ -109,7 +135,7 @@ const EditorPage: React.FC = () => {
       console.error('Failed to load folders:', error);
     }
   }, [projectId]);
-  
+
 
   // Load project data
   useEffect(() => {
@@ -118,7 +144,7 @@ const EditorPage: React.FC = () => {
       loadDocuments();
       loadFolders();
     }
-  }, [projectId,loadProject, loadDocuments, loadFolders]);
+  }, [projectId, loadProject, loadDocuments, loadFolders]);
 
   // WebSocket connection
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,51 +173,102 @@ const EditorPage: React.FC = () => {
 
       socket.on('code-update', (data: { code: string; userId: string; documentId: string }) => {
         if (!state.user || data.userId === state.user.id) return; // ignore self updates
-    
 
-    isRemoteChange.current = true;
 
-    // Update content only for that documentId
-    setFileContents(prev => {
-      const newMap = new Map(prev);
-      newMap.set(data.documentId, data.code);
-      return newMap;
-    });
-  });
+        isRemoteChange.current = true;
+
+        // Update content only for that documentId
+        setFileContents(prev => {
+          const newMap = new Map(prev);
+          newMap.set(data.documentId, data.code);
+          return newMap;
+        });
+      });
 
       return () => {
         socket.disconnect();
       };
     }
-  }, [selectedDoc, state.user,]); 
+  }, [selectedDoc, state.user,]);
 
   useEffect(() => {
-  if (!selectedDoc) return;
+    if (!selectedDoc) return;
 
-  setFileContents(prev => {
-    if (!prev.has(selectedDoc.id)) {
-      const newMap = new Map(prev);
-      newMap.set(selectedDoc.id, '// Start coding here...\n');
-      return newMap;
-    }
-    return prev;
-  });
-}, [selectedDoc]);
-
-  useEffect(() => {
-  if (selectedDoc) {
-    // If we don't have content for this file yet, load it
-    if (!fileContents.has(selectedDoc.id)) {
-      // In a real app, you'd fetch from backend
-      // For now, initialize with default content
-      setFileContents(prev => {
+    setFileContents(prev => {
+      if (!prev.has(selectedDoc.id)) {
         const newMap = new Map(prev);
         newMap.set(selectedDoc.id, '// Start coding here...\n');
         return newMap;
-      });
+      }
+      return prev;
+    });
+  }, [selectedDoc]);
+
+  useEffect(() => {
+    if (selectedDoc) {
+      // If we don't have content for this file yet, load it
+      if (!fileContents.has(selectedDoc.id)) {
+        // In a real app, you'd fetch from backend
+        // For now, initialize with default content
+        setFileContents(prev => {
+          const newMap = new Map(prev);
+          newMap.set(selectedDoc.id, '// Start coding here...\n');
+          return newMap;
+        });
+      }
     }
-  }
-}, [selectedDoc,fileContents]);
+  }, [selectedDoc, fileContents]);
+
+  // Save on unmount or when leaving the page
+  useEffect(() => {
+    return () => {
+      // Save current document before unmounting
+      if (selectedDoc && fileContents.has(selectedDoc.id)) {
+        const content = fileContents.get(selectedDoc.id);
+        if (content) {
+          saveContent(selectedDoc.id, content);
+        }
+      }
+    };
+  }, [selectedDoc, fileContents, saveContent]);
+
+  // Save when switching documents
+  const prevDocId = useRef<string | null>(null);
+  useEffect(() => {
+    return () => {
+      // Save previous document when switching
+      if (prevDocId.current && fileContents.has(prevDocId.current)) {
+        const content = fileContents.get(prevDocId.current);
+        if (content) {
+          saveContent(prevDocId.current, content);
+        }
+      }
+    };
+  }, [fileContents, saveContent]);
+
+  useEffect(() => {
+    if (selectedDoc) {
+      // Update prevDocId after switching
+      prevDocId.current = selectedDoc.id;
+    }
+  }, [selectedDoc]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (selectedDoc && fileContents.has(selectedDoc.id)) {
+          const content = fileContents.get(selectedDoc.id);
+          if (content) {
+            saveContent(selectedDoc.id, content);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedDoc, fileContents, saveContent]);
 
 
   const handleCreateFile = async (e: React.FormEvent) => {
@@ -247,7 +324,7 @@ const EditorPage: React.FC = () => {
   const handleRenameFile = async (fileId: string, newName: string) => {
     try {
       await apiService.renameDocument(fileId, newName);
-      setDocuments(documents.map(d => 
+      setDocuments(documents.map(d =>
         d.id === fileId ? { ...d, name: newName } : d
       ));
       if (selectedDoc?.id === fileId) {
@@ -274,53 +351,63 @@ const EditorPage: React.FC = () => {
   };
 
   const handleEditorChange = (value: string | undefined) => {
-  if (!value || !selectedDoc) return;
-  
-  if (!isRemoteChange.current) {
-    // Update content for current file only
-    setFileContents(prev => {
-      const newMap = new Map(prev);
-      newMap.set(selectedDoc.id, value);
-      return newMap;
-    });
-    
-    // Emit code change to other users
-    if (socketRef.current && state.user) {
-      socketRef.current.emit('code-change', {
-        documentId: selectedDoc.id,
-        code: value,
-        userId: state.user.id
+    if (!value || !selectedDoc) return;
+
+    if (!isRemoteChange.current) {
+      // Update content for current file only
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.set(selectedDoc.id, value);
+        return newMap;
       });
+
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      // Set new timeout to save after 2 seconds of inactivity
+      saveTimeoutRef.current = setTimeout(() => {
+        saveContent(selectedDoc.id, value);
+      }, 2000);
+
+      // Emit code change to other users
+      if (socketRef.current && state.user) {
+        socketRef.current.emit('code-change', {
+          documentId: selectedDoc.id,
+          code: value,
+          userId: state.user.id
+        });
+      }
+    } else {
+      isRemoteChange.current = false;
     }
-  } else {
-    isRemoteChange.current = false;
-  }
-};
+  };
 
 
- const handleDeleteFile = async (fileId: string) => {
-  try {
-    // Delete on backend
-    await apiService.deleteDocument(fileId);
+  const handleDeleteFile = async (fileId: string) => {
+    try {
+      // Delete on backend
+      await apiService.deleteDocument(fileId);
 
-    // Remove from local documents list
-    setDocuments(prev => prev.filter(d => d.id !== fileId));
+      // Remove from local documents list
+      setDocuments(prev => prev.filter(d => d.id !== fileId));
 
-    // Remove the deleted file from the fileContents map
-    setFileContents(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(fileId);
-      return newMap;
-    });
+      // Remove the deleted file from the fileContents map
+      setFileContents(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(fileId);
+        return newMap;
+      });
 
-    // If the deleted file was currently selected, clear selection
-    if (selectedDoc?.id === fileId) {
-      setSelectedDoc(null);
+      // If the deleted file was currently selected, clear selection
+      if (selectedDoc?.id === fileId) {
+        setSelectedDoc(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete file:', error);
     }
-  } catch (error) {
-    console.error('Failed to delete file:', error);
-  }
-};
+  };
   const handleSelectDoc = (doc: Document) => {
     setSelectedDoc(doc);
     if (isMobile) {
@@ -359,7 +446,7 @@ const EditorPage: React.FC = () => {
               ☰
             </button>
           )}
-          
+
           <button onClick={() => navigate('/dashboard')} style={{
             background: 'rgba(255,255,255,0.2)',
             border: 'none',
@@ -372,9 +459,9 @@ const EditorPage: React.FC = () => {
           }}>
             ← {isMobile ? '' : 'Back'}
           </button>
-          
-          <h2 style={{ 
-            margin: 0, 
+
+          <h2 style={{
+            margin: 0,
             fontSize: 'clamp(0.9rem, 2.5vw, 1.2rem)',
             maxWidth: isMobile ? '150px' : 'none',
             overflow: 'hidden',
@@ -384,27 +471,27 @@ const EditorPage: React.FC = () => {
             {project?.name || 'Loading...'}
           </h2>
         </div>
-        
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 'clamp(0.4rem, 1.5vw, 1rem)',
           flexWrap: 'wrap'
         }}>
           {/* Active Users Badge */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
             gap: '0.5rem',
             background: 'rgba(255,255,255,0.15)',
             padding: 'clamp(0.3rem, 1vw, 0.4rem) clamp(0.5rem, 1.5vw, 0.8rem)',
             borderRadius: '20px',
             fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)'
           }}>
-            <span style={{ 
-              width: '6px', 
-              height: '6px', 
-              borderRadius: '50%', 
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
               background: '#00ff88',
               display: 'inline-block',
               boxShadow: '0 0 6px #00ff88'
@@ -447,12 +534,11 @@ const EditorPage: React.FC = () => {
               💬
             </button>
           )}
-
           {/* User Info (Desktop only) */}
           {!isMobile && (
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
               gap: '0.5rem',
               background: 'rgba(255,255,255,0.15)',
               padding: '0.4rem 0.8rem',
@@ -465,10 +551,12 @@ const EditorPage: React.FC = () => {
         </div>
       </header>
 
+
+
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
         {/* Mobile Sidebar Overlay */}
         {isMobile && showSidebar && (
-          <div 
+          <div
             style={{
               position: 'fixed',
               top: 0,
@@ -498,17 +586,17 @@ const EditorPage: React.FC = () => {
           zIndex: 1000,
           boxShadow: isMobile ? '2px 0 8px rgba(0,0,0,0.3)' : 'none'
         }}>
-          <div style={{ 
+          <div style={{
             padding: 'clamp(0.75rem, 2vw, 1rem)',
             borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#444'}`,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
           }}>
-            <h3 style={{ 
-              margin: 0, 
-              fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)', 
-              textTransform: 'uppercase' 
+            <h3 style={{
+              margin: 0,
+              fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)',
+              textTransform: 'uppercase'
             }}>
               Explorer
             </h3>
@@ -525,7 +613,7 @@ const EditorPage: React.FC = () => {
               </button>
             )}
           </div>
-          
+
           <div style={{ flex: 1, padding: '0.5rem', overflowY: 'auto' }}>
             <FileTree
               folders={folders}
@@ -535,7 +623,7 @@ const EditorPage: React.FC = () => {
               onCreateFolder={handleCreateFolder}
               onCreateFile={handleCreateFileInFolder}
               onDeleteFolder={handleDeleteFolder}
-              onDeleteFile={handleDeleteFile} 
+              onDeleteFile={handleDeleteFile}
               onRenameFolder={handleRenameFolder}
               onRenameFile={handleRenameFile}
               theme={theme}
@@ -544,24 +632,66 @@ const EditorPage: React.FC = () => {
         </div>
 
         {/* Editor */}
-        <div style={{ 
-          flex: 1, 
-          display: 'flex', 
+        <div style={{
+          flex: 1,
+          display: 'flex',
           flexDirection: 'column',
           minWidth: 0
         }}>
           {selectedDoc && (
-            <div style={{ 
+            <div style={{
               background: theme === 'dark' ? '#1e1e1e' : '#f3f3f3',
-              padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)', 
+              padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
               color: theme === 'dark' ? 'white' : '#333',
               fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
+              gap: '1rem',
+              whiteSpace: 'nowrap',
+              flexWrap: 'wrap',
             }}>
-              {selectedDoc.name}
+              {/* Document Name */}
+              <span
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                }}
+                title={selectedDoc.name}
+              >
+                {selectedDoc.name}
+              </span>
+              {/* Save Status */}
+              <span
+                style={{
+                  fontSize: 'clamp(0.7rem, 1vw, 0.8rem)',
+                  color: isSaving
+                    ? theme === 'dark'
+                      ? '#ffd700'
+                      : '#b58900'
+                    : theme === 'dark'
+                      ? '#00ff88'
+                      : '#007f5f',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  flexShrink: 0,
+                }}
+              >
+                {isSaving ? (
+                  <>⏳ Saving...</>
+                ) : lastSaved ? (
+                  <>✓ Saved {lastSaved.toLocaleTimeString()}</>
+                ) : (
+                  <>✓ All changes saved</>
+                )}
+              </span>
             </div>
           )}
           <Editor
@@ -569,7 +699,7 @@ const EditorPage: React.FC = () => {
             defaultLanguage={selectedDoc?.language || 'javascript'}
             language={selectedDoc?.language || 'javascript'}
             theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
-             value={getCurrentContent()}
+            value={getCurrentContent()}
             onChange={handleEditorChange}
             onMount={(editor) => {
               editorRef.current = editor;
@@ -587,48 +717,72 @@ const EditorPage: React.FC = () => {
         </div>
 
         {/* Chat Panel - Responsive */}
-        {projectId && state.user && (
-          <div style={{
-            position: isMobile ? 'fixed' : 'relative',
-            right: 0,
-            bottom: 0,
-            top: isMobile ? 'auto' : 0,
-            width: isMobile ? '100%' : 'auto',
-            maxHeight: isMobile ? '70vh' : 'none',
-            display: (isMobile && !showChat) ? 'none' : 'block',
-            zIndex: isMobile ? 1001 : 1,
-            boxShadow: isMobile ? '0 -2px 10px rgba(0,0,0,0.3)' : 'none'
-          }}>
-            <ChatPanel 
-              projectId={projectId} 
-              socket={socketRef.current}
-              currentUserId={state.user.id}
-            />
-            {isMobile && showChat && (
-              <button 
-                onClick={() => setShowChat(false)}
+        {state.user && (
+          <div
+            style={{
+              position: isMobile ? 'fixed' : 'relative',
+              right: 0,
+              bottom: 0,
+              top: isMobile ? 'auto' : 0,
+              width: isMobile ? '100%' : '300px', // fixed width on desktop
+              height: isMobile ? '70vh' : '100%',
+              display: showChat || !isMobile ? 'flex' : 'none',
+              flexDirection: 'column',
+              zIndex: 1001,
+              boxShadow: isMobile ? '0 -2px 10px rgba(0,0,0,0.3)' : 'none',
+              background: theme === 'dark' ? '#1e1e1e' : '#f3f3f3',
+              transition: 'transform 0.3s ease',
+              transform: isMobile
+                ? showChat
+                  ? 'translateY(0%)'
+                  : 'translateY(100%)'
+                : 'none',
+            }}
+          >
+            {/* Chat Header (Mobile only) */}
+            {isMobile && (
+              <div
                 style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '10px',
-                  background: 'rgba(0,0,0,0.5)',
-                  border: 'none',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '30px',
-                  height: '30px',
-                  cursor: 'pointer',
-                  fontSize: '1.2rem',
                   display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  padding: '0.5rem 1rem',
+                  background: theme === 'dark' ? '#2d2d2d' : '#ddd',
                 }}
               >
-                ✕
-              </button>
+                <span>Chat</span>
+                <button
+                  onClick={() => setShowChat(false)}
+                  style={{
+                    background: 'rgba(0,0,0,0.5)',
+                    border: 'none',
+                    color: 'white',
+                    borderRadius: '50%',
+                    width: '30px',
+                    height: '30px',
+                    cursor: 'pointer',
+                    fontSize: '1.2rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             )}
+
+            {/* Chat Messages */}
+            <ChatPanel
+              projectId={projectId!}
+              socket={socketRef.current}
+              currentUserId={state.user.id}
+
+            />
           </div>
         )}
+
+
       </div>
 
       {/* Responsive Modals */}
@@ -646,11 +800,11 @@ const EditorPage: React.FC = () => {
           zIndex: 2000,
           padding: '1rem'
         }}
-        onClick={() => {
-          setShowNewFile(false);
-          setNewFileName('');
-          setNewFolderParentId(null);
-        }}
+          onClick={() => {
+            setShowNewFile(false);
+            setNewFileName('');
+            setNewFolderParentId(null);
+          }}
         >
           <div style={{
             background: theme === 'dark' ? '#2d2d2d' : 'white',
@@ -660,7 +814,7 @@ const EditorPage: React.FC = () => {
             width: '100%',
             maxWidth: '400px'
           }}
-          onClick={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ fontSize: 'clamp(1rem, 2.5vw, 1.2rem)' }}>Create New File</h3>
             <form onSubmit={handleCreateFile}>
@@ -731,11 +885,11 @@ const EditorPage: React.FC = () => {
           zIndex: 2000,
           padding: '1rem'
         }}
-        onClick={() => {
-          setShowNewFolderModal(false);
-          setNewFolderName('');
-          setNewFolderParentId(null);
-        }}
+          onClick={() => {
+            setShowNewFolderModal(false);
+            setNewFolderName('');
+            setNewFolderParentId(null);
+          }}
         >
           <div style={{
             background: theme === 'dark' ? '#2d2d2d' : 'white',
@@ -745,7 +899,7 @@ const EditorPage: React.FC = () => {
             width: '100%',
             maxWidth: '400px'
           }}
-          onClick={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ fontSize: 'clamp(1rem, 2.5vw, 1.2rem)' }}>Create New Folder</h3>
             <form onSubmit={handleCreateFolderSubmit}>
@@ -813,4 +967,4 @@ const EditorPage: React.FC = () => {
   );
 };
 
-export default EditorPage;
+export default EditorPage;  

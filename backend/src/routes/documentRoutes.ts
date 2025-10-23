@@ -21,7 +21,8 @@ router.post('/', async (req: AuthRequest, res) => {
         projectId, 
         folderId: folderId || null,
         name: name.trim(), 
-        language: language.toLowerCase() 
+        language: language.toLowerCase(),
+        content: '// Start coding here...\n'
       }
     });
 
@@ -64,6 +65,25 @@ router.get('/project/:projectId', async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error fetching documents:', error);
     res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+});
+
+router.get('/:id', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const document = await prisma.document.findUnique({
+      where: { id }
+    });
+
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    res.json(document);
+  } catch (error) {
+    console.error('Error fetching document:', error);
+    res.status(500).json({ error: 'Failed to fetch document' });
   }
 });
 
@@ -110,10 +130,15 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
     const { id } = req.params;
     const { content } = req.body;
 
-    // You might want to add a content field to Document model
-    // For now, you could store in a separate table or file system
+    const document = await prisma.document.update({
+      where: { id },
+      data: { 
+        content,
+        updatedAt: new Date()
+      }
+    });
     
-    res.json({ success: true });
+    res.json(document);
   } catch (error) {
     console.error('Error saving content:', error);
     res.status(500).json({ error: 'Failed to save content' });

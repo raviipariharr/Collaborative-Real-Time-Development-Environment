@@ -5,6 +5,7 @@ interface Document {
   name: string;
   language: string;
   folderId: string | null;
+  content: string
 }
 
 interface Folder {

@@ -173,5 +173,20 @@ async renameDocument(id: string, name: string) {
     { headers: getAuthHeaders() }
   );
   return response.data;
-}
+},
+
+async getDocument(id: string) {
+    const response = await axios.get(`${API_BASE_URL}/documents/${id}`, {
+      headers: getAuthHeaders()
+    });
+    return response.data;
+  },
+
+async saveDocumentContent(id: string, content: string) {
+    const response = await axios.put(`${API_BASE_URL}/documents/${id}/content`, 
+      { content },
+      { headers: getAuthHeaders() }
+    );
+    return response.data;
+  }
 };

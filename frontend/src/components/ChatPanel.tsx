@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef ,useCallback } from 'react';
-import { Socket } from 'socket.io-client';
+import io  from 'socket.io-client';
 import { apiService } from '../services/api';
+type ClientSocket = ReturnType<typeof io>;
 interface Message {
   id: string;
   message: string;
@@ -15,7 +16,7 @@ interface Message {
 
 interface ChatPanelProps {
   projectId: string;
-  socket: Socket | null;
+  socket: ClientSocket | null;
   currentUserId: string;
 }
 
@@ -59,23 +60,31 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
   }, [projectId, isOpen,loadMessages,loadUnreadCount]);
 
   useEffect(() => {
-    if (socket && projectId) {
-      socket.emit('join-project-chat', projectId);
+  if (!socket || !projectId) return;
 
-      socket.on('new-chat-message', (message: Message) => {
-        setMessages(prev => [...prev, message]);
-        
-        // If chat is closed and message is from someone else, increment unread
-        if (!isOpen && message.user.id !== currentUserId) {
-          setUnreadCount(prev => prev + 1);
-        }
-      });
+  // Define the handler once so it can be properly removed
+  const handleNewMessage = (message: Message) => {
+    setMessages(prev => [...prev, message]);
 
-      return () => {
-        socket.off('new-chat-message');
-      };
+    // Increment unread count if chat is closed and message is from someone else
+    if (!isOpen && message.user.id !== currentUserId) {
+      setUnreadCount(prev => prev + 1);
     }
-  }, [socket, projectId, isOpen, currentUserId]);
+  };
+
+  // Join chat room once per project
+  socket.emit('join-project-chat', projectId);
+
+  // Remove any old handler before adding new one
+  socket.off('new-chat-message', handleNewMessage);
+  socket.on('new-chat-message', handleNewMessage);
+
+  // Cleanup properly on unmount or when dependencies change
+  return () => {
+    socket.off('new-chat-message', handleNewMessage);
+  };
+}, [socket, projectId, isOpen, currentUserId]);
+
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messagesEndRef]);
@@ -138,8 +147,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
   return (
     <>
       {/* Chat Toggle Button with Badge */}
-      <button
-        onClick={toggleChat}
+      <button onClick={toggleChat}
         style={{
           position: 'fixed',
           bottom: '20px',
@@ -154,6 +162,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
           fontSize: '1.5rem',
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
           zIndex: 999,
+          
         }}
       >
         💬

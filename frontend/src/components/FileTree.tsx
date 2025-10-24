@@ -5,7 +5,14 @@ interface Document {
   name: string;
   language: string;
   folderId: string | null;
-  content: string
+  content: string;
+   owner?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 interface Folder {
@@ -14,6 +21,13 @@ interface Folder {
   parentId: string | null;
   children?: Folder[];
   documents?: Document[];
+  owner?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 interface FileTreeProps {
@@ -138,7 +152,7 @@ const FileTree: React.FC<FileTreeProps> = ({
     const isExpanded = expandedFolders.has(folder.id);
     const hasChildren = folder.children && folder.children.length > 0;
     const hasDocuments = folder.documents && folder.documents.length > 0;
-
+    const canEdit = folder.canEdit !== false;
     return (
       <div key={folder.id} style={{ marginLeft: `${depth * 12}px` }}>
         <div
@@ -150,17 +164,22 @@ const FileTree: React.FC<FileTreeProps> = ({
             background: 'transparent',
             borderRadius: '4px',
             transition: 'background 0.2s',
+            opacity: canEdit ? 1 : 0.6,
             userSelect: 'none'
           }}
           onClick={() => toggleFolder(folder.id)}
           onContextMenu={(e) => handleFolderContextMenu(e, folder.id)}
           onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          title={!canEdit ? `Owned by ${folder.owner?.name} (View only)` : ''}
         >
           <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
             {hasChildren || hasDocuments ? (isExpanded ? '📂' : '📁') : '📁'}
-          </span>
+            </span>
           <span style={{ fontSize: '0.9rem' }}>{folder.name}</span>
+           {!canEdit && (
+          <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>🔒</span>
+        )}
         </div>
 
         {isExpanded && (
@@ -175,7 +194,7 @@ const FileTree: React.FC<FileTreeProps> = ({
 
   const renderDocument = (doc: Document, depth: number = 0) => {
     const isSelected = doc.id === selectedDocId;
-    
+     const canEdit = doc.canEdit !== false;
     return (
       <div
         key={doc.id}
@@ -188,17 +207,22 @@ const FileTree: React.FC<FileTreeProps> = ({
           background: isSelected ? (theme === 'dark' ? 'rgba(102, 126, 234, 0.3)' : 'rgba(102, 126, 234, 0.2)') : 'transparent',
           borderRadius: '4px',
           transition: 'background 0.2s',
+          opacity: canEdit ? 1 : 0.6,
           userSelect: 'none'
         }}
         onClick={() => onSelectDoc(doc)}
         onContextMenu={(e) => handleFileContextMenu(e, doc.id)}
         onMouseEnter={(e) => !isSelected && (e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')}
         onMouseLeave={(e) => !isSelected && (e.currentTarget.style.background = 'transparent')}
+        title={!canEdit ? `Owned by ${doc.owner?.name} (View only)` : ''}
       >
         <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
           {getFileIcon(doc.language)}
         </span>
         <span style={{ fontSize: '0.9rem' }}>{doc.name}</span>
+         {!canEdit && (
+        <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>🔒</span>
+      )}
       </div>
     );
   };

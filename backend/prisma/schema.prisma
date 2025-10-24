@@ -21,6 +21,8 @@ model User {
   sentInvitations ProjectInvitation[] @relation("SentInvitations")
   projectMembers  ProjectMember[]
   ownedProjects   Project[]           @relation("ProjectOwner")
+  ownedFolders   Folder[]
+  ownedDocuments Document[]
   sessions        Session[]
 
   @@map("users")
@@ -66,8 +68,10 @@ model Document {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   folderId  String?
+  ownerId   String?
   folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+    owner   User?    @relation(fields: [ownerId], references: [id])
 
   @@map("documents")
 }
@@ -118,12 +122,14 @@ model Folder {
   name      String
   projectId String
   parentId  String?
+  ownerId     String?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   documents Document[]
   parent    Folder?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children  Folder[]   @relation("FolderHierarchy")
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner     User?     @relation(fields: [ownerId], references: [id])
 
   @@map("folders")
 }

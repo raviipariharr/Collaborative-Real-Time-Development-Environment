@@ -16,6 +16,7 @@ import documentRoutes from './routes/documentRoutes';
 import invitationRoutes from './routes/invitationRoutes';
 import chatRoutes from './routes/chatRoutes';
 import folderRoutes from './routes/folderRoutes';
+import memberRoutes from './routes/memberRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -127,6 +128,7 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/folders', folderRoutes);
+app.use('/api/members', memberRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -15,6 +15,13 @@ interface Document {
   language: string;
   folderId: string | null;
   content: string;
+  owner?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 interface Folder {
@@ -65,6 +72,9 @@ const EditorPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [canEditCurrentDoc, setCanEditCurrentDoc] = useState(true);
+
   const getCurrentContent = () => {
     if (!selectedDoc) return '';
     return fileContents.get(selectedDoc.id) || '// Start coding here...\n';
@@ -252,6 +262,12 @@ const EditorPage: React.FC = () => {
       prevDocId.current = selectedDoc.id;
     }
   }, [selectedDoc]);
+
+  useEffect(() => {
+  if (selectedDoc) {
+    setCanEditCurrentDoc(selectedDoc.canEdit !== false);
+  }
+}, [selectedDoc]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -710,6 +726,7 @@ const EditorPage: React.FC = () => {
               scrollBeyondLastLine: false,
               wordWrap: 'on',
               automaticLayout: true,
+              readOnly: !canEditCurrentDoc,
               lineNumbers: isMobile ? 'off' : 'on',
               glyphMargin: !isMobile
             }}

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
+import { checkFolderPermission } from '../middleware/permissionMiddleware';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
@@ -13,35 +14,78 @@ router.get('/project/:projectId', async (req: AuthRequest, res) => {
     const { projectId } = req.params;
     const userId = req.user!.userId;
 
-    // Check access
-    const hasAccess = await prisma.project.findFirst({
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+
+    // 🔒 Check project access + get role
+    const project = await prisma.project.findFirst({
       where: {
         id: projectId,
         OR: [
           { ownerId: userId },
-          { members: { some: { userId: userId } } }
+          { members: { some: { userId } } }
         ]
+      },
+      include: {
+        members: {
+          where: { userId },
+          select: { role: true }
+        }
       }
     });
 
-    if (!hasAccess) {
+    if (!project) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Get all folders and documents
+    const isProjectOwner = project.ownerId === userId;
+    const memberRole = project.members[0]?.role || (isProjectOwner ? 'OWNER' : 'VIEWER');
+
+    // 📂 Fetch folders and their related documents + owners
     const folders = await prisma.folder.findMany({
       where: { projectId },
       include: {
-        children: true,
-        documents: true
+        owner: { select: { id: true, name: true, email: true } },
+        children: {
+          include: {
+            owner: { select: { id: true, name: true, email: true } },
+            documents: {
+              include: {
+                owner: { select: { id: true, name: true, email: true } }
+              }
+            }
+          }
+        },
+        documents: {
+          include: {
+            owner: { select: { id: true, name: true, email: true } }
+          }
+        }
       },
       orderBy: { name: 'asc' }
     });
 
-    res.json(folders);
+    // Add permission flags
+    const foldersWithPermissions = folders.map(folder => ({
+      ...folder,
+      canEdit: isProjectOwner || folder.ownerId === userId || memberRole === 'ADMIN',
+      canDelete: isProjectOwner || folder.ownerId === userId || memberRole === 'ADMIN'
+    }));
+
+    // 🧩 Build consistent response
+    res.json({
+      project: {
+        id: project.id,
+        name: project.name,
+        isOwner: isProjectOwner,
+        role: memberRole
+      },
+       folders: foldersWithPermissions
+    });
   } catch (error) {
-    console.error('Error fetching folders:', error);
-    res.status(500).json({ error: 'Failed to fetch folders' });
+    console.error('❌ Error fetching project folders:', error);
+    res.status(500).json({ error: 'Failed to fetch project folders' });
   }
 });
 
@@ -61,20 +105,24 @@ router.post('/', async (req: AuthRequest, res) => {
         id: projectId,
         OR: [
           { ownerId: userId },
-          { members: { some: { userId: userId } } }
+           { members: { some: { userId, role: { in: ['ADMIN', 'EDITOR'] } }}}
         ]
       }
     });
 
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied' });
+      if (!hasAccess) {
+      return res.status(403).json({ error: 'You do not have permission to create folders' });
     }
 
     const folder = await prisma.folder.create({
       data: {
         projectId,
         name: name.trim(),
-        parentId: parentId || null
+        parentId: parentId || null,
+        ownerId: userId
+      },
+      include: {
+        owner: { select: { id: true, name: true, email: true } }
       }
     });
 
@@ -88,6 +136,7 @@ router.post('/', async (req: AuthRequest, res) => {
 // Rename folder
 router.put('/:id', async (req: AuthRequest, res) => {
   try {
+    const userId = req.user!.userId;
     const { id } = req.params;
     const { name } = req.body;
 
@@ -95,12 +144,43 @@ router.put('/:id', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Name is required' });
     }
 
-    const folder = await prisma.folder.update({
+    const folder = await prisma.folder.findUnique({
       where: { id },
-      data: { name: name.trim(), updatedAt: new Date() }
+      include: {
+        project: {
+          include: {
+            members: {
+              where: { userId },
+              select: { role: true }
+            }
+          }
+        }
+      }
     });
 
-    res.json(folder);
+    if (!folder) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    const isProjectOwner = folder.project.ownerId === userId;
+    const isFolderOwner = folder.ownerId === userId;
+    const memberRole = folder.project.members[0]?.role;
+    
+    if (!isProjectOwner && !isFolderOwner && memberRole !== 'ADMIN') {
+      return res.status(403).json({
+        error: 'You do not have permission to rename this folder',
+        owner: folder.ownerId
+      });
+    }
+
+    const updated = await prisma.folder.update({
+      where: { id },
+      data: { name: name.trim(), updatedAt: new Date() },
+      include: {
+        owner: { select: { id: true, name: true, email: true } }
+      }
+    });
+
+    res.json(updated);
   } catch (error) {
     console.error('Error updating folder:', error);
     res.status(500).json({ error: 'Failed to update folder' });
@@ -110,7 +190,36 @@ router.put('/:id', async (req: AuthRequest, res) => {
 // Delete folder
 router.delete('/:id', async (req: AuthRequest, res) => {
   try {
+    const userId = req.user!.userId;
     const { id } = req.params;
+
+     const folder = await prisma.folder.findUnique({
+      where: { id },
+      include: {
+        project: {
+          include: {
+            members: {
+              where: { userId },
+              select: { role: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!folder) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    const isProjectOwner = folder.project.ownerId === userId;
+    const isFolderOwner = folder.ownerId === userId;
+    const memberRole = folder.project.members[0]?.role;
+
+    if (!isProjectOwner && !isFolderOwner && memberRole !== 'ADMIN') {
+      return res.status(403).json({
+        error: 'You do not have permission to delete this folder',
+        owner: folder.ownerId
+      });
+    }
 
     await prisma.folder.delete({
       where: { id }
@@ -120,6 +229,57 @@ router.delete('/:id', async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error deleting folder:', error);
     res.status(500).json({ error: 'Failed to delete folder' });
+  }
+});
+
+// Delete folder (check permission)
+
+router.get('/project/:projectId', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { projectId } = req.params;
+
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId: userId } } }
+        ]
+      },
+      include: {
+        members: {
+          where: { userId: userId },
+          select: { role: true }
+        }
+      }
+    });
+
+    if (!project) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const isProjectOwner = project.ownerId === userId;
+    const memberRole = project.members[0]?.role;
+
+    const documents = await prisma.document.findMany({
+      where: { projectId },
+      include: {
+        owner: { select: { id: true, name: true, email: true } }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    const documentsWithPermissions = documents.map(doc => ({
+      ...doc,
+      canEdit: isProjectOwner || doc.ownerId === userId || memberRole === 'ADMIN',
+      canDelete: isProjectOwner || doc.ownerId === userId || memberRole === 'ADMIN'
+    }));
+
+    res.json(documentsWithPermissions);
+  } catch (error) {
+    console.error('Error fetching documents:', error);
+    res.status(500).json({ error: 'Failed to fetch documents' });
   }
 });
 

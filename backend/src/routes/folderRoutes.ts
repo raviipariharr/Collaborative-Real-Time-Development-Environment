@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
-import { checkFolderPermission } from '../middleware/permissionMiddleware';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
@@ -24,41 +23,13 @@ router.get('/project/:projectId', async (req: AuthRequest, res) => {
         ]
       }
     });
+
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (!projectId) {
-      return res.status(400).json({ error: 'Project ID is required' });
-    }
-
-    // 🔒 Check project access + get role
-    const project = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId } } }
-        ]
-      },
-      include: {
-        members: {
-          where: { userId },
-          select: { role: true }
-        }
-      }
-    });
-
-    if (!project) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const isProjectOwner = project.ownerId === userId;
-    const memberRole = project.members[0]?.role || (isProjectOwner ? 'OWNER' : 'VIEWER');
-
-    // 📂 Fetch folders and their related documents + owners
-    // Add permission flags
-     const folders = await prisma.folder.findMany({
+    // Get all folders and documents
+    const folders = await prisma.folder.findMany({
       where: { projectId },
       include: {
         children: true,
@@ -67,14 +38,15 @@ router.get('/project/:projectId', async (req: AuthRequest, res) => {
       orderBy: { name: 'asc' }
     });
 
-    // 🧩 Build consistent response
-   res.json(Array.isArray(folders) ? folders : []);
+    // IMPORTANT: Always return an array
+    res.json(Array.isArray(folders) ? folders : []);
   } catch (error) {
     console.error('Error fetching folders:', error);
     // Return empty array on error instead of error object
     res.status(500).json([]);
   }
 });
+
 // Create folder
 router.post('/', async (req: AuthRequest, res) => {
   try {
@@ -86,17 +58,29 @@ router.post('/', async (req: AuthRequest, res) => {
     }
 
     // Check access
-    const hasAccess = await prisma.project.findFirst({
+    const project = await prisma.project.findFirst({
       where: {
         id: projectId,
         OR: [
           { ownerId: userId },
-           { members: { some: { userId, role: { in: ['ADMIN', 'EDITOR'] } }}}
+          { members: { some: { userId: userId } } }
         ]
+      },
+      include: {
+        members: { where: { userId } }
       }
     });
 
-      if (!hasAccess) {
+    if (!project) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Check if user can create folders
+    const isOwner = project.ownerId === userId;
+    const member = project.members[0];
+    const canCreate = isOwner || member?.role === 'ADMIN' || member?.role === 'EDITOR';
+
+    if (!canCreate) {
       return res.status(403).json({ error: 'You do not have permission to create folders' });
     }
 
@@ -104,11 +88,7 @@ router.post('/', async (req: AuthRequest, res) => {
       data: {
         projectId,
         name: name.trim(),
-        parentId: parentId || null,
-        ownerId: userId
-      },
-      include: {
-        owner: { select: { id: true, name: true, email: true } }
+        parentId: parentId || null
       }
     });
 
@@ -135,10 +115,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
       include: {
         project: {
           include: {
-            members: {
-              where: { userId },
-              select: { role: true }
-            }
+            members: { where: { userId } }
           }
         }
       }
@@ -147,23 +124,18 @@ router.put('/:id', async (req: AuthRequest, res) => {
     if (!folder) {
       return res.status(404).json({ error: 'Folder not found' });
     }
+
     const isProjectOwner = folder.project.ownerId === userId;
-    const isFolderOwner = folder.ownerId === userId;
-    const memberRole = folder.project.members[0]?.role;
-    
-    if (!isProjectOwner && !isFolderOwner && memberRole !== 'ADMIN') {
-      return res.status(403).json({
-        error: 'You do not have permission to rename this folder',
-        owner: folder.ownerId
-      });
+    const member = folder.project.members[0];
+    const canRename = isProjectOwner || member?.role === 'ADMIN' || member?.role === 'EDITOR';
+
+    if (!canRename) {
+      return res.status(403).json({ error: 'You do not have permission to rename folders' });
     }
 
     const updated = await prisma.folder.update({
       where: { id },
-      data: { name: name.trim(), updatedAt: new Date() },
-      include: {
-        owner: { select: { id: true, name: true, email: true } }
-      }
+      data: { name: name.trim(), updatedAt: new Date() }
     });
 
     res.json(updated);
@@ -179,15 +151,12 @@ router.delete('/:id', async (req: AuthRequest, res) => {
     const userId = req.user!.userId;
     const { id } = req.params;
 
-     const folder = await prisma.folder.findUnique({
+    const folder = await prisma.folder.findUnique({
       where: { id },
       include: {
         project: {
           include: {
-            members: {
-              where: { userId },
-              select: { role: true }
-            }
+            members: { where: { userId } }
           }
         }
       }
@@ -196,15 +165,13 @@ router.delete('/:id', async (req: AuthRequest, res) => {
     if (!folder) {
       return res.status(404).json({ error: 'Folder not found' });
     }
-    const isProjectOwner = folder.project.ownerId === userId;
-    const isFolderOwner = folder.ownerId === userId;
-    const memberRole = folder.project.members[0]?.role;
 
-    if (!isProjectOwner && !isFolderOwner && memberRole !== 'ADMIN') {
-      return res.status(403).json({
-        error: 'You do not have permission to delete this folder',
-        owner: folder.ownerId
-      });
+    const isProjectOwner = folder.project.ownerId === userId;
+    const member = folder.project.members[0];
+    const canDelete = isProjectOwner || member?.role === 'ADMIN' || member?.role === 'EDITOR';
+
+    if (!canDelete) {
+      return res.status(403).json({ error: 'You do not have permission to delete folders' });
     }
 
     await prisma.folder.delete({
@@ -215,56 +182,6 @@ router.delete('/:id', async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error deleting folder:', error);
     res.status(500).json({ error: 'Failed to delete folder' });
-  }
-});
-
-// Delete folder (check permission)
-
-router.get('/project/:projectId', async (req: AuthRequest, res) => {
-  try {
-    const { projectId } = req.params;
-    const userId = req.user!.userId;
-    const project = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId: userId } } }
-        ]
-      },
-      include: {
-        members: {
-          where: { userId: userId },
-          select: { role: true }
-        }
-      }
-    });
-
-    if (!project) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const isProjectOwner = project.ownerId === userId;
-    const memberRole = project.members[0]?.role;
-
-    const documents = await prisma.document.findMany({
-      where: { projectId },
-      include: {
-        owner: { select: { id: true, name: true, email: true } }
-      },
-      orderBy: { updatedAt: 'desc' }
-    });
-
-    const documentsWithPermissions = documents.map(doc => ({
-      ...doc,
-      canEdit: isProjectOwner || doc.ownerId === userId || memberRole === 'ADMIN',
-      canDelete: isProjectOwner || doc.ownerId === userId || memberRole === 'ADMIN'
-    }));
-
-    res.json(documentsWithPermissions);
-  } catch (error) {
-    console.error('Error fetching documents:', error);
-    res.status(500).json({ error: 'Failed to fetch documents' });
   }
 });
 

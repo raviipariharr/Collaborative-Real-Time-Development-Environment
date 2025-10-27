@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import InvitationBadge from '../components/InvitationBadge';
 import { useTheme } from '../contexts/ThemeContext';
+import MemberManagement from '../components/MemberManagement';
 
 interface Project {
   id: string;
@@ -22,14 +23,15 @@ const Dashboard: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', description: '' });
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [selectedProjectForMembers, setSelectedProjectForMembers] = useState<Project | null>(null);
   // Invite modal state
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
-  
+
   // Update and rename
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -41,9 +43,9 @@ const Dashboard: React.FC = () => {
   const openEditModal = (project: Project, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingProject(project);
-    setEditForm({ 
-      name: project.name, 
-      description: project.description || '' 
+    setEditForm({
+      name: project.name,
+      description: project.description || ''
     });
     setShowEditModal(true);
   };
@@ -114,10 +116,10 @@ const Dashboard: React.FC = () => {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteProjectId) return;
-    
+
     setInviteLoading(true);
     setInviteError('');
-    
+
     try {
       await apiService.sendInvitation({
         projectId: inviteProjectId,
@@ -143,6 +145,12 @@ const Dashboard: React.FC = () => {
     setInviteError('');
   };
 
+  const openMemberManagement = (project: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedProjectForMembers(project);
+    setShowMemberModal(true);
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: theme === 'dark' ? '#1e1e1e' : '#f5f5f5' }}>
       {/* Responsive Header */}
@@ -157,11 +165,11 @@ const Dashboard: React.FC = () => {
         gap: '1rem'
       }}>
         <h1 style={{ margin: 0, fontSize: 'clamp(1.2rem, 4vw, 1.8rem)' }}>CodeCollab</h1>
-        
+
         {/* Desktop Menu */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: '1rem',
           flexWrap: 'wrap'
         }} className="desktop-menu">
@@ -178,10 +186,10 @@ const Dashboard: React.FC = () => {
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
           {state.user?.avatar && (
-            <img src={state.user.avatar} alt={state.user.name} 
-              style={{ 
-                width: '40px', 
-                height: '40px', 
+            <img src={state.user.avatar} alt={state.user.name}
+              style={{
+                width: '40px',
+                height: '40px',
                 borderRadius: '50%',
                 display: window.innerWidth < 768 ? 'none' : 'block'
               }} />
@@ -202,7 +210,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Mobile Menu Button */}
-        <button 
+        <button
           onClick={() => setShowMobileMenu(!showMobileMenu)}
           style={{
             display: window.innerWidth < 768 ? 'block' : 'none',
@@ -230,7 +238,7 @@ const Dashboard: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               {state.user?.avatar && (
-                <img src={state.user.avatar} alt={state.user.name} 
+                <img src={state.user.avatar} alt={state.user.name}
                   style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
               )}
               <span style={{ color: theme === 'dark' ? 'white' : '#333' }}>
@@ -241,16 +249,16 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      <main style={{ 
-        padding: 'clamp(1rem, 3vw, 2rem)', 
-        maxWidth: '1400px', 
+      <main style={{
+        padding: 'clamp(1rem, 3vw, 2rem)',
+        maxWidth: '1400px',
         margin: '0 auto',
         width: '100%'
       }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: '2rem',
           flexWrap: 'wrap',
           gap: '1rem'
@@ -280,9 +288,9 @@ const Dashboard: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', 
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
             gap: 'clamp(1rem, 2vw, 1.5rem)'
           }}>
             {projects.map(project => (
@@ -295,40 +303,45 @@ const Dashboard: React.FC = () => {
                 cursor: 'pointer',
                 transition: 'transform 0.2s',
               }}
-              onClick={() => navigate(`/editor/${project.id}`)}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                onClick={() => navigate(`/editor/${project.id}`)}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
               >
-                <h3 style={{ 
+                <h3 style={{
                   marginBottom: '0.5rem',
                   fontSize: 'clamp(1rem, 2vw, 1.2rem)',
                   wordBreak: 'break-word'
                 }}>{project.name}</h3>
-                <p style={{ 
-                  color: '#666', 
-                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)', 
+                <p style={{
+                  color: '#666',
+                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)',
                   marginBottom: '1rem',
                   wordBreak: 'break-word'
                 }}>
                   {project.description || 'No description'}
                 </p>
-                <div style={{ 
-                  fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)', 
-                  color: '#999', 
-                  marginBottom: '1rem' 
+                <div style={{
+                  fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)',
+                  color: '#999',
+                  marginBottom: '1rem'
                 }}>
                   <div>{project._count.documents} files • {project._count.members} members</div>
                   <div style={{ wordBreak: 'break-word' }}>Owner: {project.owner.name}</div>
                 </div>
 
                 {/* Action Buttons - Responsive */}
-                <div style={{ 
+                <div style={{
                   display: 'grid',
                   gridTemplateColumns: window.innerWidth < 480 ? '1fr 1fr' : '1fr 1fr auto',
                   gap: '0.5rem'
-                }}>
-                  <button 
-                    onClick={(e) => openEditModal(project, e)}
+                }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditModal(project, e);
+                    }}
                     style={{
                       padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
                       background: '#4caf50',
@@ -341,8 +354,11 @@ const Dashboard: React.FC = () => {
                   >
                     Edit
                   </button>
-                  <button 
-                    onClick={(e) => openInviteModal(project.id, e)}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openInviteModal(project.id, e);
+                    }}
                     style={{
                       padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
                       background: '#667eea',
@@ -355,10 +371,31 @@ const Dashboard: React.FC = () => {
                   >
                     Invite
                   </button>
-                  <button 
-                    onClick={(e) => confirmDelete(project.id, e)}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Extra safety
+                      openMemberManagement(project, e);
+                    }}
                     style={{
                       padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.6rem, 2vw, 0.75rem)',
+                      background: '#f44336',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)',
+
+                    }}
+                  >
+                    Members
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); 
+                      confirmDelete(project.id, e);
+                    }}
+                    style={{
+                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
                       background: '#f44336',
                       color: 'white',
                       border: 'none',
@@ -405,9 +442,9 @@ const Dashboard: React.FC = () => {
               maxHeight: '90vh',
               overflow: 'auto'
             }}
-            onClick={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
-              <h2 style={{ 
+              <h2 style={{
                 marginBottom: '1.5rem',
                 fontSize: 'clamp(1.2rem, 3vw, 1.5rem)'
               }}>Create New Project</h2>
@@ -496,11 +533,11 @@ const Dashboard: React.FC = () => {
           justifyContent: 'center',
           zIndex: 1000
         }}
-        onClick={() => {
-          setShowInviteModal(false);
-          setInviteEmail('');
-          setInviteError('');
-        }}
+          onClick={() => {
+            setShowInviteModal(false);
+            setInviteEmail('');
+            setInviteError('');
+          }}
         >
           <div style={{
             background: 'white',
@@ -509,7 +546,7 @@ const Dashboard: React.FC = () => {
             maxWidth: '500px',
             width: '90%'
           }}
-          onClick={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ marginBottom: '1.5rem' }}>Invite Member to Project</h2>
             <form onSubmit={handleInvite}>
@@ -533,7 +570,7 @@ const Dashboard: React.FC = () => {
                   They will receive an invitation to join this project
                 </p>
               </div>
-              
+
               {inviteError && (
                 <div style={{
                   background: '#fee',
@@ -548,13 +585,13 @@ const Dashboard: React.FC = () => {
               )}
 
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => {
                     setShowInviteModal(false);
                     setInviteEmail('');
                     setInviteError('');
-                  }} 
+                  }}
                   style={{
                     padding: '0.75rem 1.5rem',
                     border: '1px solid #ddd',
@@ -565,8 +602,8 @@ const Dashboard: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={inviteLoading}
                   style={{
                     padding: '0.75rem 1.5rem',
@@ -586,144 +623,156 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Edit Project Modal */}
-{showEditModal && editingProject && (
-  <div style={{
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000
-  }}
-  onClick={() => setShowEditModal(false)}
-  >
-    <div style={{
-      background: 'white',
-      padding: '2rem',
-      borderRadius: '12px',
-      maxWidth: '500px',
-      width: '90%'
-    }}
-    onClick={(e) => e.stopPropagation()}
-    >
-      <h2 style={{ marginBottom: '1.5rem' }}>Edit Project</h2>
-      <form onSubmit={handleUpdateProject}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name *</label>
-          <input
-            type="text"
-            value={editForm.name}
-            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-            required
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              fontSize: '1rem'
-            }}
-          />
-        </div>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description</label>
-          <textarea
-            value={editForm.description}
-            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-            rows={3}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              fontSize: '1rem',
-              resize: 'vertical'
-            }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-          <button type="button" onClick={() => setShowEditModal(false)} style={{
-            padding: '0.75rem 1.5rem',
-            border: '1px solid #ddd',
-            borderRadius: '6px',
+      {showEditModal && editingProject && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}
+          onClick={() => setShowEditModal(false)}
+        >
+          <div style={{
             background: 'white',
-            cursor: 'pointer'
-          }}>
-            Cancel
-          </button>
-          <button type="submit" style={{
-            padding: '0.75rem 1.5rem',
-            background: '#4caf50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}>
-            Save Changes
-          </button>
+            padding: '2rem',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%'
+          }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '1.5rem' }}>Edit Project</h2>
+            <form onSubmit={handleUpdateProject}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name *</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '1rem'
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '1rem',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowEditModal(false)} style={{
+                  padding: '0.75rem 1.5rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  background: 'white',
+                  cursor: 'pointer'
+                }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#4caf50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}>
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </form>
-    </div>
-  </div>
-)}
+      )}
 
-{/* Delete Confirmation Modal */}
-{showDeleteConfirm && (
-  <div style={{
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000
-  }}
-  onClick={() => setShowDeleteConfirm(false)}
-  >
-    <div style={{
-      background: 'white',
-      padding: '2rem',
-      borderRadius: '12px',
-      maxWidth: '400px',
-      width: '90%'
-    }}
-    onClick={(e) => e.stopPropagation()}
-    >
-      <h2 style={{ marginBottom: '1rem', color: '#f44336' }}>Delete Project?</h2>
-      <p style={{ marginBottom: '1.5rem', color: '#666' }}>
-        Are you sure you want to delete this project? This action cannot be undone. 
-        All files and data will be permanently deleted.
-      </p>
-      <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-        <button onClick={() => setShowDeleteConfirm(false)} style={{
-          padding: '0.75rem 1.5rem',
-          border: '1px solid #ddd',
-          borderRadius: '6px',
-          background: 'white',
-          cursor: 'pointer'
-        }}>
-          Cancel
-        </button>
-        <button onClick={handleDeleteProject} style={{
-          padding: '0.75rem 1.5rem',
-          background: '#f44336',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: 'pointer'
-        }}>
-          Delete Project
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '12px',
+            maxWidth: '400px',
+            width: '90%'
+          }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '1rem', color: '#f44336' }}>Delete Project?</h2>
+            <p style={{ marginBottom: '1.5rem', color: '#666' }}>
+              Are you sure you want to delete this project? This action cannot be undone.
+              All files and data will be permanently deleted.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowDeleteConfirm(false)} style={{
+                padding: '0.75rem 1.5rem',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                background: 'white',
+                cursor: 'pointer'
+              }}>
+                Cancel
+              </button>
+              <button onClick={handleDeleteProject} style={{
+                padding: '0.75rem 1.5rem',
+                background: '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}>
+                Delete Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Member Management Modal */}
+      {showMemberModal && selectedProjectForMembers && state.user && (
+        <MemberManagement
+          project={selectedProjectForMembers}
+          currentUserId={state.user.id}
+          onClose={() => {
+            setShowMemberModal(false);
+            setSelectedProjectForMembers(null);
+          }}
+        />
+      )}
     </div>
   );
 };

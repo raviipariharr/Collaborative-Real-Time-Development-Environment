@@ -167,4 +167,48 @@ router.delete('/:id', async (req: AuthRequest, res) => {
   }
 });
 
+// Get project members with roles
+router.get('/:id/members', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const projectId = req.params.id;
+
+    // Check if user has access to the project
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId: userId } } },
+          { isPublic: true }
+        ]
+      }
+    });
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found or access denied' });
+    }
+
+     // Get all members with their details
+    const members = await prisma.projectMember.findMany({
+      where: { projectId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true
+          }
+        }
+      },
+      orderBy: { joinedAt: 'asc' }
+    });
+
+    res.json(members);
+  } catch (error) {
+    console.error('Error fetching project members:', error);
+    res.status(500).json({ error: 'Failed to fetch project members' });
+  }
+});
+
 export default router;

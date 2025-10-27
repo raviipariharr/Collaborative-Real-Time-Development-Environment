@@ -188,5 +188,56 @@ async saveDocumentContent(id: string, content: string) {
       { headers: getAuthHeaders() }
     );
     return response.data;
-  }
+  },
+
+  async getProjectMembers(projectId: string) {
+  const response = await axios.get(`${API_BASE_URL}/projects/${projectId}/members`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async updateMemberRole(memberId: string, role: 'ADMIN' | 'EDITOR' | 'VIEWER') {
+  const response = await axios.put(`${API_BASE_URL}/members/${memberId}/role`, 
+    { role },
+    { headers: getAuthHeaders() }
+  );
+  return response.data;
+},
+
+async removeMember(memberId: string) {
+  const response = await axios.delete(`${API_BASE_URL}/members/${memberId}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async getFolderPermissions(folderId: string) {
+  const response = await axios.get(`${API_BASE_URL}/folder-permissions/${folderId}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async grantFolderPermission(folderId: string, data: { userId: string; canEdit: boolean; canDelete: boolean }) {
+  const response = await axios.post(`${API_BASE_URL}/folder-permissions/${folderId}/grant`, data, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async revokeFolderPermission(folderId: string, userId: string) {
+  const response = await axios.delete(`${API_BASE_URL}/folder-permissions/${folderId}/revoke/${userId}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async checkFolderEditPermission(folderId: string) {
+  const response = await axios.get(`${API_BASE_URL}/folder-permissions/${folderId}/can-edit`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
 };

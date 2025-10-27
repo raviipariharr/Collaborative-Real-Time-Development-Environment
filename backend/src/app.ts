@@ -17,6 +17,7 @@ import invitationRoutes from './routes/invitationRoutes';
 import chatRoutes from './routes/chatRoutes';
 import folderRoutes from './routes/folderRoutes';
 import memberRoutes from './routes/memberRoutes';
+import folderPermissionRoutes from './routes/folderPermissionRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -75,9 +76,23 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: process.env.NODE_ENV === 'production' ? 100 : 1000,
-  message: { error: 'Too many requests' }
+  message: { error: 'Too many requests' },
+  skip: (req) => {
+    // Skip rate limiting for localhost in development
+    if (process.env.NODE_ENV !== 'production') {
+      return true;
+    }
+    return false;
+  }
 });
+
+if (process.env.NODE_ENV === 'production') {
 app.use('/api/', limiter);
+} else {
+  // In development, only limit auth routes
+  app.use('/api/auth/', limiter);
+  console.log('⚠️  Rate limiting disabled for development (except auth)');
+}
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
@@ -129,6 +144,7 @@ app.use('/api/invitations', invitationRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/members', memberRoutes);
+app.use('/api/folder-permissions', folderPermissionRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

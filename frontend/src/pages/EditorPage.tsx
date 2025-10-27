@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import io from 'socket.io-client';
 import ChatPanel from '../components/ChatPanel';
 import FileTree from '../components/FileTree';
+import FolderPermissionModal from '../components/FolderPermissionModal';
 const SOCKET_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 interface Document {
@@ -15,13 +16,6 @@ interface Document {
   language: string;
   folderId: string | null;
   content: string;
-  owner?: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  canEdit?: boolean;
-  canDelete?: boolean;
 }
 
 interface Folder {
@@ -34,6 +28,18 @@ interface ActiveUser {
   userId: string;
   userName: string;
   socketId: string;
+}
+
+interface ProjectMember {
+  id: string;
+  userId: string;
+  role: 'ADMIN' | 'EDITOR' | 'VIEWER';
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
 }
 
 const EditorPage: React.FC = () => {
@@ -54,6 +60,13 @@ const EditorPage: React.FC = () => {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
 
+  // Permission states
+  const [userRole, setUserRole] = useState<'ADMIN' | 'EDITOR' | 'VIEWER' | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [folderPermissions, setFolderPermissions] = useState<Map<string, boolean>>(new Map()); // Track folder edit permissions
+  const [showFolderPermissionModal, setShowFolderPermissionModal] = useState(false);
+  const [selectedFolderForPermission, setSelectedFolderForPermission] = useState<{ id: string; name: string } | null>(null);
 
   // Modals
   const [showNewFile, setShowNewFile] = useState(false);
@@ -68,12 +81,37 @@ const EditorPage: React.FC = () => {
   const editorRef = useRef<any>(null);
   const isRemoteChange = useRef(false);
 
-  //saving 
+  // Saving 
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [canEditCurrentDoc, setCanEditCurrentDoc] = useState(true);
+  // Permission helper functions
+  const canEdit = () => {
+    return isOwner || userRole === 'ADMIN' || userRole === 'EDITOR';
+  };
+
+  const canEditCurrentDoc = () => {
+    if (!selectedDoc) return false;
+    
+    // Owner and Admin can always edit
+    if (isOwner || userRole === 'ADMIN') return true;
+    
+    // Check folder-level permission
+    if (selectedDoc.folderId) {
+      const hasFolderPermission = folderPermissions.get(selectedDoc.folderId);
+      if (hasFolderPermission !== undefined) {
+        return hasFolderPermission;
+      }
+    }
+    
+    // Default to role-based permission
+    return userRole === 'EDITOR';
+  };
+
+  const canManageProject = () => {
+    return isOwner || userRole === 'ADMIN';
+  };
 
   const getCurrentContent = () => {
     if (!selectedDoc) return '';
@@ -98,17 +136,32 @@ const EditorPage: React.FC = () => {
     try {
       const data = await apiService.getProject(projectId!);
       setProject(data);
+      setIsOwner(data.owner.id === state.user?.id);
     } catch (error) {
       console.error('Failed to load project:', error);
     }
-  }, [projectId]);
+  }, [projectId, state.user?.id]);
+
+  const loadProjectMembers = useCallback(async () => {
+    try {
+      const data = await apiService.getProjectMembers(projectId!);
+      setProjectMembers(data);
+      
+      // Find current user's role
+      const currentMember = data.find((m: ProjectMember) => m.userId === state.user?.id);
+      if (currentMember) {
+        setUserRole(currentMember.role);
+      }
+    } catch (error) {
+      console.error('Failed to load members:', error);
+    }
+  }, [projectId, state.user?.id]);
 
   const loadDocuments = useCallback(async () => {
     try {
       const data = await apiService.getProjectDocuments(projectId!);
       setDocuments(data);
 
-      // Initialize file contents from loaded documents
       const newContents = new Map<string, string>();
       data.forEach((doc: Document) => {
         newContents.set(doc.id, doc.content || '// Start coding here...\n');
@@ -124,9 +177,21 @@ const EditorPage: React.FC = () => {
   }, [projectId, selectedDoc]);
 
   const saveContent = useCallback(async (docId: string, content: string) => {
+    // Don't save if already saving or content hasn't changed
+    if (isSaving || lastSaveContentRef.current === content) {
+      return;
+    }
+
+    // Check permission
+    if (!isOwner && userRole !== 'ADMIN' && userRole !== 'EDITOR') {
+      console.log('No permission to save');
+      return;
+    }
+
     try {
       setIsSaving(true);
       await apiService.saveDocumentContent(docId, content);
+      lastSaveContentRef.current = content;
       setLastSaved(new Date());
       console.log('Content saved for document:', docId);
     } catch (error) {
@@ -134,18 +199,36 @@ const EditorPage: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
-  }, []);
-
+  }, [isSaving, isOwner, userRole]);
 
   const loadFolders = useCallback(async () => {
     try {
       const data = await apiService.getFolders(projectId!);
-      setFolders(data);
+      // Ensure data is an array
+      const foldersArray = Array.isArray(data) ? data : [];
+      setFolders(foldersArray);
+      
+      // Load permissions for each folder
+      if (foldersArray.length > 0) {
+        const permissionsMap = new Map<string, boolean>();
+        await Promise.all(
+          foldersArray.map(async (folder) => {
+            try {
+              const perm = await apiService.checkFolderEditPermission(folder.id);
+              permissionsMap.set(folder.id, perm.canEdit);
+            } catch (error) {
+              console.error(`Failed to check permission for folder ${folder.id}:`, error);
+              permissionsMap.set(folder.id, false);
+            }
+          })
+        );
+        setFolderPermissions(permissionsMap);
+      }
     } catch (error) {
       console.error('Failed to load folders:', error);
+      setFolders([]); // Set to empty array on error
     }
   }, [projectId]);
-
 
   // Load project data
   useEffect(() => {
@@ -153,11 +236,11 @@ const EditorPage: React.FC = () => {
       loadProject();
       loadDocuments();
       loadFolders();
+      loadProjectMembers();
     }
-  }, [projectId, loadProject, loadDocuments, loadFolders]);
+  }, [projectId, loadProject, loadDocuments, loadFolders, loadProjectMembers]);
 
   // WebSocket connection
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (selectedDoc && state.user) {
       socketRef.current = io(SOCKET_URL);
@@ -182,12 +265,9 @@ const EditorPage: React.FC = () => {
       });
 
       socket.on('code-update', (data: { code: string; userId: string; documentId: string }) => {
-        if (!state.user || data.userId === state.user.id) return; // ignore self updates
-
+        if (!state.user || data.userId === state.user.id) return;
 
         isRemoteChange.current = true;
-
-        // Update content only for that documentId
         setFileContents(prev => {
           const newMap = new Map(prev);
           newMap.set(data.documentId, data.code);
@@ -199,7 +279,7 @@ const EditorPage: React.FC = () => {
         socket.disconnect();
       };
     }
-  }, [selectedDoc, state.user,]);
+  }, [selectedDoc, state.user]);
 
   useEffect(() => {
     if (!selectedDoc) return;
@@ -214,68 +294,45 @@ const EditorPage: React.FC = () => {
     });
   }, [selectedDoc]);
 
-  useEffect(() => {
-    if (selectedDoc) {
-      // If we don't have content for this file yet, load it
-      if (!fileContents.has(selectedDoc.id)) {
-        // In a real app, you'd fetch from backend
-        // For now, initialize with default content
-        setFileContents(prev => {
-          const newMap = new Map(prev);
-          newMap.set(selectedDoc.id, '// Start coding here...\n');
-          return newMap;
-        });
-      }
-    }
-  }, [selectedDoc, fileContents]);
-
-  // Save on unmount or when leaving the page
+  // Save on unmount
   useEffect(() => {
     return () => {
-      // Save current document before unmounting
       if (selectedDoc && fileContents.has(selectedDoc.id)) {
         const content = fileContents.get(selectedDoc.id);
-        if (content) {
+        if (content && (isOwner || userRole === 'ADMIN' || userRole === 'EDITOR')) {
           saveContent(selectedDoc.id, content);
         }
       }
     };
-  }, [selectedDoc, fileContents, saveContent]);
+  }, [selectedDoc, fileContents, saveContent, isOwner, userRole]);
 
   // Save when switching documents
   const prevDocId = useRef<string | null>(null);
   useEffect(() => {
     return () => {
-      // Save previous document when switching
       if (prevDocId.current && fileContents.has(prevDocId.current)) {
         const content = fileContents.get(prevDocId.current);
-        if (content) {
+        if (content && (isOwner || userRole === 'ADMIN' || userRole === 'EDITOR')) {
           saveContent(prevDocId.current, content);
         }
       }
     };
-  }, [fileContents, saveContent]);
+  }, [fileContents, saveContent, isOwner, userRole]);
 
   useEffect(() => {
     if (selectedDoc) {
-      // Update prevDocId after switching
       prevDocId.current = selectedDoc.id;
     }
   }, [selectedDoc]);
 
-  useEffect(() => {
-  if (selectedDoc) {
-    setCanEditCurrentDoc(selectedDoc.canEdit !== false);
-  }
-}, [selectedDoc]);
-
+  // Ctrl+S to save
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (selectedDoc && fileContents.has(selectedDoc.id)) {
           const content = fileContents.get(selectedDoc.id);
-          if (content) {
+          if (content && (isOwner || userRole === 'ADMIN' || userRole === 'EDITOR')) {
             saveContent(selectedDoc.id, content);
           }
         }
@@ -284,11 +341,16 @@ const EditorPage: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedDoc, fileContents, saveContent]);
-
+  }, [selectedDoc, fileContents, saveContent, isOwner, userRole]);
 
   const handleCreateFile = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!canEdit()) {
+      alert('You do not have permission to create files');
+      return;
+    }
+
     try {
       const doc = await apiService.createDocument({
         projectId: projectId!,
@@ -303,16 +365,27 @@ const EditorPage: React.FC = () => {
       setNewFolderParentId(null);
     } catch (error) {
       console.error('Failed to create file:', error);
+      alert('Failed to create file. You may not have permission.');
     }
   };
 
   const handleCreateFolder = (parentId: string | null) => {
+    if (!canEdit()) {
+      alert('You do not have permission to create folders');
+      return;
+    }
     setNewFolderParentId(parentId);
     setShowNewFolderModal(true);
   };
 
   const handleCreateFolderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!canEdit()) {
+      alert('You do not have permission to create folders');
+      return;
+    }
+
     try {
       await apiService.createFolder({
         projectId: projectId!,
@@ -325,19 +398,31 @@ const EditorPage: React.FC = () => {
       loadFolders();
     } catch (error) {
       console.error('Failed to create folder:', error);
+      alert('Failed to create folder. You may not have permission.');
     }
   };
 
   const handleRenameFolder = async (folderId: string, newName: string) => {
+    if (!canEdit()) {
+      alert('You do not have permission to rename folders');
+      return;
+    }
+
     try {
       await apiService.renameFolder(folderId, newName);
       loadFolders();
     } catch (error) {
       console.error('Failed to rename folder:', error);
+      alert('Failed to rename folder. You may not have permission.');
     }
   };
 
   const handleRenameFile = async (fileId: string, newName: string) => {
+    if (!canEdit()) {
+      alert('You do not have permission to rename files');
+      return;
+    }
+
     try {
       await apiService.renameDocument(fileId, newName);
       setDocuments(documents.map(d =>
@@ -348,20 +433,31 @@ const EditorPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to rename file:', error);
+      alert('Failed to rename file. You may not have permission.');
     }
   };
 
   const handleDeleteFolder = async (folderId: string) => {
+    if (!canEdit()) {
+      alert('You do not have permission to delete folders');
+      return;
+    }
+
     try {
       await apiService.deleteFolder(folderId);
       loadFolders();
       loadDocuments();
     } catch (error) {
       console.error('Failed to delete folder:', error);
+      alert('Failed to delete folder. You may not have permission.');
     }
   };
 
   const handleCreateFileInFolder = (folderId: string | null) => {
+    if (!canEdit()) {
+      alert('You do not have permission to create files');
+      return;
+    }
     setNewFolderParentId(folderId);
     setShowNewFile(true);
   };
@@ -369,8 +465,12 @@ const EditorPage: React.FC = () => {
   const handleEditorChange = (value: string | undefined) => {
     if (!value || !selectedDoc) return;
 
+    // Don't allow changes if user can't edit
+    if (!canEdit()) {
+      return;
+    }
+
     if (!isRemoteChange.current) {
-      // Update content for current file only
       setFileContents(prev => {
         const newMap = new Map(prev);
         newMap.set(selectedDoc.id, value);
@@ -382,12 +482,12 @@ const EditorPage: React.FC = () => {
         clearTimeout(saveTimeoutRef.current);
       }
 
-      // Set new timeout to save after 2 seconds of inactivity
+      // Increase debounce to 3 seconds to reduce API calls
       saveTimeoutRef.current = setTimeout(() => {
         saveContent(selectedDoc.id, value);
-      }, 2000);
+      }, 3000);
 
-      // Emit code change to other users
+      // Emit to socket (less frequently using throttle)
       if (socketRef.current && state.user) {
         socketRef.current.emit('code-change', {
           documentId: selectedDoc.id,
@@ -400,30 +500,30 @@ const EditorPage: React.FC = () => {
     }
   };
 
-
   const handleDeleteFile = async (fileId: string) => {
+    if (!canEdit()) {
+      alert('You do not have permission to delete files');
+      return;
+    }
+
     try {
-      // Delete on backend
       await apiService.deleteDocument(fileId);
-
-      // Remove from local documents list
       setDocuments(prev => prev.filter(d => d.id !== fileId));
-
-      // Remove the deleted file from the fileContents map
       setFileContents(prev => {
         const newMap = new Map(prev);
         newMap.delete(fileId);
         return newMap;
       });
 
-      // If the deleted file was currently selected, clear selection
       if (selectedDoc?.id === fileId) {
         setSelectedDoc(null);
       }
     } catch (error) {
       console.error('Failed to delete file:', error);
+      alert('Failed to delete file. You may not have permission.');
     }
   };
+
   const handleSelectDoc = (doc: Document) => {
     setSelectedDoc(doc);
     if (isMobile) {
@@ -431,9 +531,18 @@ const EditorPage: React.FC = () => {
     }
   };
 
+  const handleManageFolderAccess = (folderId: string, folderName: string) => {
+    if (!canManageProject()) {
+      alert('Only project owner or admin can manage folder permissions');
+      return;
+    }
+    setSelectedFolderForPermission({ id: folderId, name: folderName });
+    setShowFolderPermissionModal(true);
+  };
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Responsive Header */}
+      {/* Header */}
       <header style={{
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         padding: 'clamp(0.5rem, 2vw, 0.75rem) clamp(0.75rem, 3vw, 1.5rem)',
@@ -446,7 +555,6 @@ const EditorPage: React.FC = () => {
         gap: '0.5rem'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 2vw, 1rem)' }}>
-          {/* Mobile Menu Toggle */}
           {isMobile && (
             <button onClick={() => setShowSidebar(!showSidebar)} style={{
               background: 'rgba(255,255,255,0.2)',
@@ -494,7 +602,27 @@ const EditorPage: React.FC = () => {
           gap: 'clamp(0.4rem, 1.5vw, 1rem)',
           flexWrap: 'wrap'
         }}>
-          {/* Active Users Badge */}
+          {/* Role Badge */}
+          {userRole && (
+            <div style={{
+              background: userRole === 'ADMIN' ? 'rgba(255,215,0,0.3)' : 
+                         userRole === 'EDITOR' ? 'rgba(76,175,80,0.3)' : 
+                         'rgba(158,158,158,0.3)',
+              padding: 'clamp(0.3rem, 1vw, 0.4rem) clamp(0.5rem, 1.5vw, 0.8rem)',
+              borderRadius: '20px',
+              fontSize: 'clamp(0.7rem, 1.5vw, 0.85rem)',
+              border: `1px solid ${
+                userRole === 'ADMIN' ? 'rgba(255,215,0,0.6)' : 
+                userRole === 'EDITOR' ? 'rgba(76,175,80,0.6)' : 
+                'rgba(158,158,158,0.6)'
+              }`,
+              fontWeight: 'bold'
+            }}>
+              {isOwner ? '👑 Owner' : userRole}
+            </div>
+          )}
+
+          {/* Active Users */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -515,7 +643,6 @@ const EditorPage: React.FC = () => {
             <span>{activeUsers.length + 1}</span>
           </div>
 
-          {/* Theme Toggle */}
           <button onClick={toggleTheme} style={{
             background: 'rgba(255,255,255,0.3)',
             border: '2px solid rgba(255,255,255,0.5)',
@@ -536,7 +663,6 @@ const EditorPage: React.FC = () => {
             )}
           </button>
 
-          {/* Chat Toggle (Mobile) */}
           {isMobile && (
             <button onClick={() => setShowChat(!showChat)} style={{
               background: 'rgba(255,255,255,0.2)',
@@ -550,7 +676,7 @@ const EditorPage: React.FC = () => {
               💬
             </button>
           )}
-          {/* User Info (Desktop only) */}
+
           {!isMobile && (
             <div style={{
               display: 'flex',
@@ -566,8 +692,6 @@ const EditorPage: React.FC = () => {
           )}
         </div>
       </header>
-
-
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
         {/* Mobile Sidebar Overlay */}
@@ -586,7 +710,7 @@ const EditorPage: React.FC = () => {
           />
         )}
 
-        {/* Sidebar with File Tree */}
+        {/* Sidebar */}
         <div style={{
           width: isMobile ? '80%' : 'clamp(200px, 20vw, 300px)',
           maxWidth: isMobile ? '280px' : 'none',
@@ -632,8 +756,8 @@ const EditorPage: React.FC = () => {
 
           <div style={{ flex: 1, padding: '0.5rem', overflowY: 'auto' }}>
             <FileTree
-              folders={folders}
-              documents={documents}
+              folders={Array.isArray(folders) ? folders : []}
+              documents={Array.isArray(documents) ? documents : []}
               selectedDocId={selectedDoc?.id || null}
               onSelectDoc={handleSelectDoc}
               onCreateFolder={handleCreateFolder}
@@ -642,6 +766,7 @@ const EditorPage: React.FC = () => {
               onDeleteFile={handleDeleteFile}
               onRenameFolder={handleRenameFolder}
               onRenameFile={handleRenameFile}
+              onManageFolderAccess={handleManageFolderAccess}
               theme={theme}
             />
           </div>
@@ -670,7 +795,6 @@ const EditorPage: React.FC = () => {
               whiteSpace: 'nowrap',
               flexWrap: 'wrap',
             }}>
-              {/* Document Name */}
               <span
                 style={{
                   overflow: 'hidden',
@@ -683,6 +807,25 @@ const EditorPage: React.FC = () => {
               >
                 {selectedDoc.name}
               </span>
+
+              {/* Read-Only Indicator */}
+              {!canEditCurrentDoc() && (
+                <span style={{
+                  background: '#ff9800',
+                  color: 'white',
+                  padding: '0.3rem 0.8rem',
+                  borderRadius: '12px',
+                  fontSize: 'clamp(0.7rem, 1vw, 0.75rem)',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  flexShrink: 0
+                }}>
+                  🔒 READ-ONLY
+                </span>
+              )}
+
               {/* Save Status */}
               <span
                 style={{
@@ -691,6 +834,8 @@ const EditorPage: React.FC = () => {
                     ? theme === 'dark'
                       ? '#ffd700'
                       : '#b58900'
+                    : !canEditCurrentDoc()
+                    ? '#ff9800'
                     : theme === 'dark'
                       ? '#00ff88'
                       : '#007f5f',
@@ -700,7 +845,9 @@ const EditorPage: React.FC = () => {
                   flexShrink: 0,
                 }}
               >
-                {isSaving ? (
+                {!canEditCurrentDoc() ? (
+                  <>👁️ View Mode</>
+                ) : isSaving ? (
                   <>⏳ Saving...</>
                 ) : lastSaved ? (
                   <>✓ Saved {lastSaved.toLocaleTimeString()}</>
@@ -726,14 +873,16 @@ const EditorPage: React.FC = () => {
               scrollBeyondLastLine: false,
               wordWrap: 'on',
               automaticLayout: true,
-              readOnly: !canEditCurrentDoc,
               lineNumbers: isMobile ? 'off' : 'on',
-              glyphMargin: !isMobile
+              glyphMargin: !isMobile,
+              readOnly: !canEditCurrentDoc(), // Make read-only if no permission
+              domReadOnly: !canEditCurrentDoc(),
+              cursorStyle: canEditCurrentDoc() ? 'line' : 'block-outline',
             }}
           />
         </div>
 
-        {/* Chat Panel - Responsive */}
+        {/* Chat Panel */}
         {state.user && (
           <div
             style={{
@@ -741,7 +890,7 @@ const EditorPage: React.FC = () => {
               right: 0,
               bottom: 0,
               top: isMobile ? 'auto' : 0,
-              width: isMobile ? '100%' : '300px', // fixed width on desktop
+              width: isMobile ? '100%' : '300px',
               height: isMobile ? '70vh' : '100%',
               display: showChat || !isMobile ? 'flex' : 'none',
               flexDirection: 'column',
@@ -756,7 +905,6 @@ const EditorPage: React.FC = () => {
                 : 'none',
             }}
           >
-            {/* Chat Header (Mobile only) */}
             {isMobile && (
               <div
                 style={{
@@ -789,20 +937,16 @@ const EditorPage: React.FC = () => {
               </div>
             )}
 
-            {/* Chat Messages */}
             <ChatPanel
               projectId={projectId!}
               socket={socketRef.current}
               currentUserId={state.user.id}
-
             />
           </div>
         )}
-
-
       </div>
 
-      {/* Responsive Modals */}
+      {/* Modals */}
       {showNewFile && (
         <div style={{
           position: 'fixed',
@@ -887,7 +1031,6 @@ const EditorPage: React.FC = () => {
         </div>
       )}
 
-      {/* New Folder Modal */}
       {showNewFolderModal && (
         <div style={{
           position: 'fixed',
@@ -984,4 +1127,4 @@ const EditorPage: React.FC = () => {
   );
 };
 
-export default EditorPage;  
+export default EditorPage;

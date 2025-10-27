@@ -5,14 +5,7 @@ interface Document {
   name: string;
   language: string;
   folderId: string | null;
-  content: string;
-   owner?: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  canEdit?: boolean;
-  canDelete?: boolean;
+  content: string
 }
 
 interface Folder {
@@ -21,13 +14,6 @@ interface Folder {
   parentId: string | null;
   children?: Folder[];
   documents?: Document[];
-  owner?: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  canEdit?: boolean;
-  canDelete?: boolean;
 }
 
 interface FileTreeProps {
@@ -38,9 +24,10 @@ interface FileTreeProps {
   onCreateFolder: (parentId: string | null) => void;
   onCreateFile: (folderId: string | null) => void;
   onDeleteFolder: (folderId: string) => void;
-  onDeleteFile: (fileId: string) => void;  // ADD THIS
+  onDeleteFile: (fileId: string) => void;
   onRenameFolder: (folderId: string, newName: string) => void;
-  onRenameFile: (fileId: string, newName: string) => void; 
+  onRenameFile: (fileId: string, newName: string) => void;
+  onManageFolderAccess?: (folderId: string, folderName: string) => void; // NEW
   theme: 'light' | 'dark';
 }
 
@@ -52,17 +39,17 @@ const FileTree: React.FC<FileTreeProps> = ({
   onCreateFolder,
   onCreateFile,
   onDeleteFolder,
-  onDeleteFile, 
-  onRenameFile, 
+  onDeleteFile,
+  onRenameFile,
   onRenameFolder,
   theme
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<{ 
-    x: number; 
-    y: number; 
-    type: 'folder' | 'file' | 'root'; 
-    id: string | null 
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    type: 'folder' | 'file' | 'root';
+    id: string | null
   } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
@@ -104,33 +91,33 @@ const FileTree: React.FC<FileTreeProps> = ({
   const handleFolderContextMenu = (e: React.MouseEvent, folderId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ 
-      x: e.clientX, 
-      y: e.clientY, 
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
       type: 'folder',
-      id: folderId 
+      id: folderId
     });
   };
 
   const handleFileContextMenu = (e: React.MouseEvent, fileId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ 
-      x: e.clientX, 
-      y: e.clientY, 
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
       type: 'file',
-      id: fileId 
+      id: fileId
     });
   };
 
   const handleRootContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ 
-      x: e.clientX, 
-      y: e.clientY, 
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
       type: 'root',
-      id: null 
+      id: null
     });
   };
 
@@ -139,12 +126,18 @@ const FileTree: React.FC<FileTreeProps> = ({
   };
 
   const buildTree = (parentId: string | null): Folder[] => {
+    // Safety check: ensure folders is an array
+    if (!Array.isArray(folders)) {
+      console.error('folders is not an array:', folders);
+      return [];
+    }
+
     return folders
       .filter(f => f.parentId === parentId)
       .map(folder => ({
         ...folder,
         children: buildTree(folder.id),
-        documents: documents.filter(d => d.folderId === folder.id)
+        documents: Array.isArray(documents) ? documents.filter(d => d.folderId === folder.id) : []
       }));
   };
 
@@ -152,7 +145,7 @@ const FileTree: React.FC<FileTreeProps> = ({
     const isExpanded = expandedFolders.has(folder.id);
     const hasChildren = folder.children && folder.children.length > 0;
     const hasDocuments = folder.documents && folder.documents.length > 0;
-    const canEdit = folder.canEdit !== false;
+
     return (
       <div key={folder.id} style={{ marginLeft: `${depth * 12}px` }}>
         <div
@@ -164,22 +157,17 @@ const FileTree: React.FC<FileTreeProps> = ({
             background: 'transparent',
             borderRadius: '4px',
             transition: 'background 0.2s',
-            opacity: canEdit ? 1 : 0.6,
             userSelect: 'none'
           }}
           onClick={() => toggleFolder(folder.id)}
           onContextMenu={(e) => handleFolderContextMenu(e, folder.id)}
           onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          title={!canEdit ? `Owned by ${folder.owner?.name} (View only)` : ''}
         >
           <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
             {hasChildren || hasDocuments ? (isExpanded ? '📂' : '📁') : '📁'}
-            </span>
+          </span>
           <span style={{ fontSize: '0.9rem' }}>{folder.name}</span>
-           {!canEdit && (
-          <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>🔒</span>
-        )}
         </div>
 
         {isExpanded && (
@@ -194,7 +182,7 @@ const FileTree: React.FC<FileTreeProps> = ({
 
   const renderDocument = (doc: Document, depth: number = 0) => {
     const isSelected = doc.id === selectedDocId;
-     const canEdit = doc.canEdit !== false;
+
     return (
       <div
         key={doc.id}
@@ -207,22 +195,17 @@ const FileTree: React.FC<FileTreeProps> = ({
           background: isSelected ? (theme === 'dark' ? 'rgba(102, 126, 234, 0.3)' : 'rgba(102, 126, 234, 0.2)') : 'transparent',
           borderRadius: '4px',
           transition: 'background 0.2s',
-          opacity: canEdit ? 1 : 0.6,
           userSelect: 'none'
         }}
         onClick={() => onSelectDoc(doc)}
         onContextMenu={(e) => handleFileContextMenu(e, doc.id)}
         onMouseEnter={(e) => !isSelected && (e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')}
         onMouseLeave={(e) => !isSelected && (e.currentTarget.style.background = 'transparent')}
-        title={!canEdit ? `Owned by ${doc.owner?.name} (View only)` : ''}
       >
         <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
           {getFileIcon(doc.language)}
         </span>
         <span style={{ fontSize: '0.9rem' }}>{doc.name}</span>
-         {!canEdit && (
-        <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>🔒</span>
-      )}
       </div>
     );
   };
@@ -240,22 +223,23 @@ const FileTree: React.FC<FileTreeProps> = ({
     return icons[language] || '📄';
   };
 
-  const tree = buildTree(null);
-  const rootDocuments = documents.filter(d => !d.folderId);
+  // Safety check for tree building
+  const tree = Array.isArray(folders) ? buildTree(null) : [];
+  const rootDocuments = Array.isArray(documents) ? documents.filter(d => !d.folderId) : [];
 
   return (
     <div style={{ position: 'relative', height: '100%' }}>
-      <div 
+      <div
         onContextMenu={handleRootContextMenu}
         style={{ minHeight: '100%', padding: '0.5rem' }}
       >
         {tree.map(folder => renderFolder(folder))}
         {rootDocuments.map(doc => renderDocument(doc))}
-        
+
         {tree.length === 0 && rootDocuments.length === 0 && (
-          <div style={{ 
-            padding: '2rem 1rem', 
-            textAlign: 'center', 
+          <div style={{
+            padding: '2rem 1rem',
+            textAlign: 'center',
             color: '#888',
             fontSize: '0.85rem',
             lineHeight: '1.6'
@@ -340,8 +324,8 @@ const FileTree: React.FC<FileTreeProps> = ({
           {/* Folder-specific actions */}
           {contextMenu.type === 'folder' && contextMenu.id && (
             <>
-              <div style={{ 
-                height: '1px', 
+              <div style={{
+                height: '1px',
                 background: theme === 'dark' ? '#444' : '#ddd',
                 margin: '0.25rem 0'
               }} />
@@ -400,62 +384,62 @@ const FileTree: React.FC<FileTreeProps> = ({
           )}
 
           {/* File-specific actions */}
-{contextMenu.type === 'file' && contextMenu.id && (
-  <>
-    <button
-      onClick={() => {
-        const file = documents.find(d => d.id === contextMenu.id);
-        const newName = prompt('Enter new file name:', file?.name);
-        if (newName && newName.trim()) {
-          onRenameFile(contextMenu.id!, newName.trim());
-        }
-        closeContextMenu();
-      }}
-      style={{
-        width: '100%',
-        padding: '0.75rem 1rem',
-        background: 'transparent',
-        border: 'none',
-        textAlign: 'left',
-        cursor: 'pointer',
-        color: theme === 'dark' ? 'white' : '#333',
-        fontSize: '0.9rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem'
-      }}
-      onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
-      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-    >
-      <span>✏️</span> Rename
-    </button>
-    <button
-      onClick={() => {
-        if (window.confirm('Delete this file?')) {
-          onDeleteFile(contextMenu.id!);
-        }
-        closeContextMenu();
-      }}
-      style={{
-        width: '100%',
-        padding: '0.75rem 1rem',
-        background: 'transparent',
-        border: 'none',
-        textAlign: 'left',
-        cursor: 'pointer',
-        color: '#f44336',
-        fontSize: '0.9rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem'
-      }}
-      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,67,54,0.1)'}
-      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-    >
-      <span>🗑️</span> Delete File
-    </button>
-  </>
-)}
+          {contextMenu.type === 'file' && contextMenu.id && (
+            <>
+              <button
+                onClick={() => {
+                  const file = documents.find(d => d.id === contextMenu.id);
+                  const newName = prompt('Enter new file name:', file?.name);
+                  if (newName && newName.trim()) {
+                    onRenameFile(contextMenu.id!, newName.trim());
+                  }
+                  closeContextMenu();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: theme === 'dark' ? 'white' : '#333',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span>✏️</span> Rename
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm('Delete this file?')) {
+                    onDeleteFile(contextMenu.id!);
+                  }
+                  closeContextMenu();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: '#f44336',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,67,54,0.1)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span>🗑️</span> Delete File
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

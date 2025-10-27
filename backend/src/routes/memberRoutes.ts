@@ -33,13 +33,11 @@ router.get('/project/:projectId', async (req: AuthRequest, res) => {
         user: {
           select: { id: true, name: true, email: true, avatar: true }
         }
-      }
+      },
+      orderBy: { joinedAt: 'asc' }
     });
 
-    res.json({
-      owner: project.ownerId,
-      members
-    });
+    res.json(members);
   } catch (error) {
     console.error('Error fetching members:', error);
     res.status(500).json({ error: 'Failed to fetch members' });
@@ -53,10 +51,11 @@ router.put('/:memberId/role', async (req: AuthRequest, res) => {
     const { memberId } = req.params;
     const { role } = req.body;
 
-    if (!['ADMIN', 'EDITOR', 'VIEWER'].includes(role)) {
+    if (!role || !['ADMIN', 'EDITOR', 'VIEWER'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
     }
 
+    // Get the member first to find the project
     const member = await prisma.projectMember.findUnique({
       where: { id: memberId },
       include: { project: true }

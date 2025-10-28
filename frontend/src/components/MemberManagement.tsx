@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
+import MemberPermissionManager from './MemberPermissionManager';
 
 interface ProjectMember {
   id: string;
@@ -21,6 +22,7 @@ interface Project {
     id: string;
     name: string;
     email: string;
+    avatar?:string;
   };
 }
 
@@ -39,7 +41,8 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
-
+  const [showPermissionManager, setShowPermissionManager] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<ProjectMember | null>(null);
   const isOwner = project.owner.id === currentUserId;
 
   useEffect(() => {
@@ -89,7 +92,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
     setChangingRoleId(memberId);
     try {
       await apiService.updateMemberRole(memberId, newRole);
-      setMembers(members.map(m => 
+      setMembers(members.map(m =>
         m.id === memberId ? { ...m, role: newRole } : m
       ));
     } catch (error) {
@@ -134,10 +137,10 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
@@ -156,7 +159,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
       padding: '1rem',
       overflow: 'auto'
     }}
-    onClick={onClose}
+      onClick={onClose}
     >
       <div style={{
         background: 'white',
@@ -167,7 +170,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
         overflow: 'auto',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }}
-      onClick={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{
@@ -211,9 +214,9 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
         {/* Content */}
         <div style={{ padding: '1.5rem' }}>
           {/* Action Bar */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: '1.5rem',
             flexWrap: 'wrap',
@@ -255,8 +258,8 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
             padding: '1rem',
             marginBottom: '1.5rem'
           }}>
-            <div style={{ 
-              fontSize: '0.85rem', 
+            <div style={{
+              fontSize: '0.85rem',
               color: '#b8860b',
               fontWeight: 'bold',
               marginBottom: '0.75rem',
@@ -268,8 +271,8 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               {project.owner.avatar ? (
-                <img 
-                  src={project.owner.avatar} 
+                <img
+                  src={project.owner.avatar}
                   alt={project.owner.name}
                   style={{
                     width: '48px',
@@ -299,9 +302,9 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                 <div style={{ fontWeight: '600', fontSize: '1rem', marginBottom: '0.25rem' }}>
                   {project.owner.name}
                   {project.owner.id === currentUserId && (
-                    <span style={{ 
-                      marginLeft: '0.5rem', 
-                      fontSize: '0.8rem', 
+                    <span style={{
+                      marginLeft: '0.5rem',
+                      fontSize: '0.8rem',
                       color: '#666',
                       fontWeight: 'normal'
                     }}>
@@ -330,7 +333,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
               {members.map((member) => {
                 const roleColors = getRoleBadgeColor(member.role);
                 const isCurrentUser = member.userId === currentUserId;
-                
+
                 return (
                   <div
                     key={member.id}
@@ -349,8 +352,8 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                   >
                     {/* Avatar */}
                     {member.user.avatar ? (
-                      <img 
-                        src={member.user.avatar} 
+                      <img
+                        src={member.user.avatar}
                         alt={member.user.name}
                         style={{
                           width: '48px',
@@ -379,25 +382,25 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
 
                     {/* Member Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ 
-                        fontWeight: '600', 
-                        fontSize: '1rem', 
+                      <div style={{
+                        fontWeight: '600',
+                        fontSize: '1rem',
                         marginBottom: '0.25rem',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.5rem',
                         flexWrap: 'wrap'
                       }}>
-                        <span style={{ 
-                          overflow: 'hidden', 
+                        <span style={{
+                          overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
                         }}>
                           {member.user.name}
                         </span>
                         {isCurrentUser && (
-                          <span style={{ 
-                            fontSize: '0.75rem', 
+                          <span style={{
+                            fontSize: '0.75rem',
                             color: '#666',
                             background: '#f5f5f5',
                             padding: '0.2rem 0.6rem',
@@ -408,8 +411,8 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                           </span>
                         )}
                       </div>
-                      <div style={{ 
-                        fontSize: '0.85rem', 
+                      <div style={{
+                        fontSize: '0.85rem',
                         color: '#666',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -461,6 +464,29 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                         </span>
                       )}
 
+                      {isOwner && member.role !== 'ADMIN' && (
+                        <button
+                          onClick={() => {
+                            setSelectedMember(member);
+                            setShowPermissionManager(true);
+                          }}
+                          style={{
+                            background: '#ff9800',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '0.5rem 0.75rem',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Manage specific folder/file access"
+                        >
+                          🔐 Access
+                        </button>
+                      )}
+
                       {/* Remove Button */}
                       {isOwner && (
                         <button
@@ -494,6 +520,20 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                         </button>
                       )}
                     </div>
+
+                    {showPermissionManager && selectedMember && (
+                      <MemberPermissionManager
+                        member={selectedMember}
+                        projectId={project.id}
+                        onClose={() => {
+                          setShowPermissionManager(false);
+                          setSelectedMember(null);
+                        }}
+                        onUpdate={() => {
+                          loadMembers();
+                        }}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -508,8 +548,8 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
             borderRadius: '12px',
             border: '1px solid #e0e0e0'
           }}>
-            <h3 style={{ 
-              margin: '0 0 1rem 0', 
+            <h3 style={{
+              margin: '0 0 1rem 0',
               fontSize: '0.95rem',
               color: '#666',
               fontWeight: '600'
@@ -587,7 +627,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
           justifyContent: 'center',
           zIndex: 2001
         }}
-        onClick={() => setShowInviteModal(false)}
+          onClick={() => setShowInviteModal(false)}
         >
           <div style={{
             background: 'white',
@@ -597,7 +637,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
             width: '90%',
             boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
           }}
-          onClick={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1.3rem' }}>Invite Team Member</h3>
             <form onSubmit={handleInvite}>

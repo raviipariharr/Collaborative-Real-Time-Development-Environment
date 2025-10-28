@@ -240,4 +240,41 @@ async checkFolderEditPermission(folderId: string) {
   return response.data;
 },
 
+async getMemberPermissions(userId: string, projectId: string) {
+  const response = await axios.get(`${API_BASE_URL}/member-permissions/user/${userId}/project/${projectId}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async grantMemberPermission(data: {
+  userId: string;
+  projectId: string;
+  type: 'folder' | 'document';
+  resourceId: string;
+  canEdit: boolean;
+  canDelete: boolean;
+}) {
+  const response = await axios.post(`${API_BASE_URL}/member-permissions/grant`, data, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async updateMemberPermission(permissionId: string, data: { canEdit?: boolean; canDelete?: boolean }) {
+  const response = await axios.put(`${API_BASE_URL}/member-permissions/${permissionId}`, data, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async revokeMemberPermission(userId: string, type: 'folder' | 'document', resourceId: string) {
+  const response = await axios.delete(
+    `${API_BASE_URL}/member-permissions/user/${userId}/type/${type}/resource/${resourceId}`,
+    { headers: getAuthHeaders() }
+  );
+  return response.data;
+},
+
+
 };

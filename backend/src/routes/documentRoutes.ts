@@ -278,7 +278,8 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
           include: {
             permissions: { where: { userId } }
           }
-        }
+        },
+        permissions: { where: { userId } } // Check document-level permissions
       }
     });
 
@@ -291,6 +292,9 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
     const member = document.project.members[0];
     const memberRole = member?.role;
 
+    // Check document-level permission (highest priority for this file)
+    const docPermission = document.permissions[0];
+    
     // Check folder-level permission
     let hasFolderPermission = false;
     if (document.folderId && document.folder) {
@@ -298,13 +302,15 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
       hasFolderPermission = folderPerm?.canEdit || false;
     }
 
-    // Permission logic:
+    // Permission logic (in order of priority):
     // 1. Owner/Admin always can edit
-    // 2. If folder permission exists, use it (overrides role)
-    // 3. Otherwise, use role (EDITOR can edit)
+    // 2. Document-level permission (if exists, overrides everything)
+    // 3. Folder permission (if file in folder and permission exists)
+    // 4. Role-based (EDITOR can edit by default)
     const canEdit = 
       isProjectOwner || 
       memberRole === 'ADMIN' || 
+      (docPermission?.canEdit) || // Document permission takes priority
       (document.folderId ? hasFolderPermission : memberRole === 'EDITOR');
 
     if (!canEdit) {

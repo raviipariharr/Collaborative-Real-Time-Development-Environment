@@ -18,6 +18,8 @@ import chatRoutes from './routes/chatRoutes';
 import folderRoutes from './routes/folderRoutes';
 import memberRoutes from './routes/memberRoutes';
 import folderPermissionRoutes from './routes/folderPermissionRoutes';
+import memberPermissionRoutes from './routes/memberPermissionRoutes';
+
 
 // Load environment variables
 dotenv.config();
@@ -145,6 +147,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/members', memberRoutes);
 app.use('/api/folder-permissions', folderPermissionRoutes);
+app.use('/api/member-permissions', memberPermissionRoutes);
+
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

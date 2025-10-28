@@ -82,9 +82,12 @@ const EditorPage: React.FC = () => {
   const isRemoteChange = useRef(false);
 
   // Saving 
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+   const lastSaveContentRef = useRef<string>('');
+  const prevDocId = useRef<string | null>(null);
+   //saving state
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Permission helper functions
   const canEdit = () => {
@@ -209,7 +212,7 @@ const EditorPage: React.FC = () => {
       setFolders(foldersArray);
       
       // Load permissions for each folder
-      if (foldersArray.length > 0) {
+      if (foldersArray.length > 0 && state.user) {
         const permissionsMap = new Map<string, boolean>();
         await Promise.all(
           foldersArray.map(async (folder) => {
@@ -228,7 +231,7 @@ const EditorPage: React.FC = () => {
       console.error('Failed to load folders:', error);
       setFolders([]); // Set to empty array on error
     }
-  }, [projectId]);
+  }, [projectId, state.user]);
 
   // Load project data
   useEffect(() => {
@@ -307,7 +310,6 @@ const EditorPage: React.FC = () => {
   }, [selectedDoc, fileContents, saveContent, isOwner, userRole]);
 
   // Save when switching documents
-  const prevDocId = useRef<string | null>(null);
   useEffect(() => {
     return () => {
       if (prevDocId.current && fileContents.has(prevDocId.current)) {
@@ -321,6 +323,7 @@ const EditorPage: React.FC = () => {
 
   useEffect(() => {
     if (selectedDoc) {
+      // Update prevDocId after switching
       prevDocId.current = selectedDoc.id;
     }
   }, [selectedDoc]);
@@ -1113,6 +1116,20 @@ const EditorPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Folder Permission Modal */}
+      {showFolderPermissionModal && selectedFolderForPermission && (
+        <FolderPermissionModal
+          folderId={selectedFolderForPermission.id}
+          folderName={selectedFolderForPermission.name}
+          projectId={projectId!}
+          onClose={() => {
+            setShowFolderPermissionModal(false);
+            setSelectedFolderForPermission(null);
+            loadFolders(); // Reload to update permissions
+          }}
+        />
       )}
 
       <style>{`

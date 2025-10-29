@@ -276,5 +276,33 @@ async revokeMemberPermission(userId: string, type: 'folder' | 'document', resour
   return response.data;
 },
 
+async checkDocumentEditPermission(documentId: string) {
+  const response = await axios.get(`${API_BASE_URL}/documents/${documentId}/can-edit`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async getDocumentPermissions(documentId: string) {
+  const response = await axios.get(`${API_BASE_URL}/document-permissions/${documentId}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async grantDocumentPermission(documentId: string, data: { userId: string; canEdit: boolean; canDelete: boolean }) {
+  const response = await axios.post(`${API_BASE_URL}/document-permissions/${documentId}/grant`, data, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
+async revokeDocumentPermission(documentId: string, userId: string) {
+  const response = await axios.delete(`${API_BASE_URL}/document-permissions/${documentId}/revoke/${userId}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
+
 
 };

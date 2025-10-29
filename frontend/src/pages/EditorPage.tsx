@@ -67,6 +67,7 @@ const EditorPage: React.FC = () => {
   const [folderPermissions, setFolderPermissions] = useState<Map<string, boolean>>(new Map()); // Track folder edit permissions
   const [showFolderPermissionModal, setShowFolderPermissionModal] = useState(false);
   const [selectedFolderForPermission, setSelectedFolderForPermission] = useState<{ id: string; name: string } | null>(null);
+  const [documentPermissions, setDocumentPermissions] = useState<Map<string, boolean>>(new Map());
 
   // Modals
   const [showNewFile, setShowNewFile] = useState(false);
@@ -100,16 +101,23 @@ const EditorPage: React.FC = () => {
     // Owner and Admin can always edit
     if (isOwner || userRole === 'ADMIN') return true;
     
+      // Check if there's a document-level permission (highest priority)
+  const docPermissions = documentPermissions.get(selectedDoc.id);
+  if (docPermissions !== undefined) {
+    return docPermissions;
+  }
+
     // Check folder-level permission
     if (selectedDoc.folderId) {
       const hasFolderPermission = folderPermissions.get(selectedDoc.folderId);
       if (hasFolderPermission !== undefined) {
         return hasFolderPermission;
       }
+      return false;
     }
     
     // Default to role-based permission
-    return userRole === 'EDITOR';
+    return false;
   };
 
   const canManageProject = () => {
@@ -179,6 +187,26 @@ const EditorPage: React.FC = () => {
     }
   }, [projectId, selectedDoc]);
 
+  const loadDocumentPermissions = useCallback(async () => {
+  if (!selectedDoc || !state.user) return;
+  
+  try {
+    const perm = await apiService.checkDocumentEditPermission(selectedDoc.id);
+    setDocumentPermissions(prev => {
+      const newMap = new Map(prev);
+      newMap.set(selectedDoc.id, perm.canEdit);
+      return newMap;
+    });
+  } catch (error) {
+    console.error(`Failed to check permission for document ${selectedDoc.id}:`, error);
+    setDocumentPermissions(prev => {
+      const newMap = new Map(prev);
+      newMap.set(selectedDoc.id, false);
+      return newMap;
+    });
+  }
+}, [selectedDoc, state.user]);
+
   const saveContent = useCallback(async (docId: string, content: string) => {
     // Don't save if already saving or content hasn't changed
     if (isSaving || lastSaveContentRef.current === content) {
@@ -242,6 +270,12 @@ const EditorPage: React.FC = () => {
       loadProjectMembers();
     }
   }, [projectId, loadProject, loadDocuments, loadFolders, loadProjectMembers]);
+
+  useEffect(() => {
+  if (selectedDoc) {
+    loadDocumentPermissions();
+  }
+}, [selectedDoc, loadDocumentPermissions]);
 
   // WebSocket connection
   useEffect(() => {

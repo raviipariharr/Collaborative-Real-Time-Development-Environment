@@ -105,66 +105,182 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
     return permissions.find(p => p.type === type && p.resourceId === resourceId);
   };
 
+  // FIX 1: Recursively collect all folder IDs and document IDs within a folder
+  const collectAllResourceIds = (folder: Folder): { folders: string[], documents: string[] } => {
+    const folderIds = [folder.id];
+    const documentIds = folder.documents?.map(d => d.id) || [];
+
+    folder.children?.forEach(child => {
+      const childResources = collectAllResourceIds(child);
+      folderIds.push(...childResources.folders);
+      documentIds.push(...childResources.documents);
+    });
+
+    return { folders: folderIds, documents: documentIds };
+  };
+
+  // FIX 1 & 2: Enhanced toggle with automatic expansion and no tab switching
   const handleTogglePermission = async (
     type: 'folder' | 'document',
     resourceId: string,
     resourceName: string,
-    currentPermission: Permission | undefined
+    currentPermission: Permission | undefined,
+    folderData?: Folder
   ) => {
     try {
       if (currentPermission) {
-        // Remove permission
-        await apiService.revokeMemberPermission(member.userId, type, resourceId);
-        setPermissions(permissions.filter(p => 
-          !(p.type === type && p.resourceId === resourceId)
-        ));
+        // FIX 1: If removing a folder permission, also remove all nested resources
+        if (type === 'folder' && folderData) {
+          const { folders: folderIds, documents: documentIds } = collectAllResourceIds(folderData);
+          
+          // Remove all folder permissions
+          for (const folderId of folderIds) {
+            await apiService.revokeMemberPermission(member.userId, 'folder', folderId);
+          }
+          
+          // Remove all document permissions
+          for (const docId of documentIds) {
+            await apiService.revokeMemberPermission(member.userId, 'document', docId);
+          }
+          
+          // Update local state - remove all nested permissions
+          setPermissions(permissions.filter(p => {
+            if (p.type === 'folder' && folderIds.includes(p.resourceId)) return false;
+            if (p.type === 'document' && documentIds.includes(p.resourceId)) return false;
+            return true;
+          }));
+        } else {
+          // Remove permission for single resource
+          await apiService.revokeMemberPermission(member.userId, type, resourceId);
+          setPermissions(permissions.filter(p => 
+            !(p.type === type && p.resourceId === resourceId)
+          ));
+        }
       } else {
-        // Grant permission
-        const newPerm = await apiService.grantMemberPermission({
-          userId: member.userId,
-          projectId,
-          type,
-          resourceId,
-          canEdit: true,
-          canDelete: member.role === 'EDITOR'
-        });
-        setPermissions([...permissions, {
-          id: newPerm.id,
-          type,
-          resourceId,
-          resourceName,
-          canEdit: true,
-          canDelete: member.role === 'EDITOR'
-        }]);
+        // FIX 1: If it's a folder, grant permissions to all nested resources
+        if (type === 'folder' && folderData) {
+          const { folders: folderIds, documents: documentIds } = collectAllResourceIds(folderData);
+          
+          // Grant folder permission
+          const newPerms: Permission[] = [];
+          
+          for (const folderId of folderIds) {
+            const folderName = findFolderName(folderId);
+            const newPerm = await apiService.grantMemberPermission({
+              userId: member.userId,
+              projectId,
+              type: 'folder',
+              resourceId: folderId,
+              canEdit: true,
+              canDelete: member.role === 'EDITOR'
+            });
+            newPerms.push({
+              id: newPerm.id,
+              type: 'folder',
+              resourceId: folderId,
+              resourceName: folderName || 'Unknown Folder',
+              canEdit: true,
+              canDelete: member.role === 'EDITOR'
+            });
+          }
+          
+          // Grant document permissions
+          for (const docId of documentIds) {
+            const docName = findDocumentName(docId);
+            const newPerm = await apiService.grantMemberPermission({
+              userId: member.userId,
+              projectId,
+              type: 'document',
+              resourceId: docId,
+              canEdit: true,
+              canDelete: member.role === 'EDITOR'
+            });
+            newPerms.push({
+              id: newPerm.id,
+              type: 'document',
+              resourceId: docId,
+              resourceName: docName || 'Unknown Document',
+              canEdit: true,
+              canDelete: member.role === 'EDITOR'
+            });
+          }
+          
+          setPermissions([...permissions, ...newPerms]);
+          
+          // Expand the folder to show the changes
+          setExpandedFolders(prev => new Set([...prev, resourceId]));
+        } else {
+          // Grant permission for single document
+          const newPerm = await apiService.grantMemberPermission({
+            userId: member.userId,
+            projectId,
+            type,
+            resourceId,
+            canEdit: true,
+            canDelete: member.role === 'EDITOR'
+          });
+          setPermissions([...permissions, {
+            id: newPerm.id,
+            type,
+            resourceId,
+            resourceName,
+            canEdit: true,
+            canDelete: member.role === 'EDITOR'
+          }]);
+        }
       }
-      onUpdate();
+      
+      // FIX 2: Do NOT call onUpdate() which triggers reload and tab switch
+      // Removed: onUpdate();
+      
     } catch (error) {
       console.error('Failed to toggle permission:', error);
       alert('Failed to update permission');
     }
   };
 
-  const handleUpdatePermission = async (
-    permId: string,
-    field: 'canEdit' | 'canDelete',
-    value: boolean
-  ) => {
+  // Helper functions to find names
+  const findFolderName = (folderId: string): string => {
+    const findInTree = (folders: Folder[]): string | null => {
+      for (const folder of folders) {
+        if (folder.id === folderId) return folder.name;
+        if (folder.children) {
+          const found = findInTree(folder.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findInTree(folders) || 'Unknown Folder';
+  };
+
+  const findDocumentName = (docId: string): string => {
+    const findInTree = (folders: Folder[]): string | null => {
+      for (const folder of folders) {
+        const doc = folder.documents?.find(d => d.id === docId);
+        if (doc) return doc.name;
+        if (folder.children) {
+          const found = findInTree(folder.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const treeDoc = findInTree(folders);
+    if (treeDoc) return treeDoc;
+    const rootDoc = documents.find(d => d.id === docId);
+    return rootDoc?.name || 'Unknown Document';
+  };
+
+  // FIX 3: Removed handleUpdatePermission - permissions are now read-only in Assigned tab
+  const handleRemovePermission = async (permId: string, type: 'folder' | 'document', resourceId: string) => {
     try {
-      const perm = permissions.find(p => p.id === permId);
-      if (!perm) return;
-
-      await apiService.updateMemberPermission(permId, {
-        canEdit: field === 'canEdit' ? value : perm.canEdit,
-        canDelete: field === 'canDelete' ? value : perm.canDelete
-      });
-
-      setPermissions(permissions.map(p =>
-        p.id === permId
-          ? { ...p, [field]: value }
-          : p
-      ));
+      await apiService.revokeMemberPermission(member.userId, type, resourceId);
+      setPermissions(permissions.filter(p => p.id !== permId));
+      // Do NOT call onUpdate() to avoid tab switching
     } catch (error) {
-      console.error('Failed to update permission:', error);
+      console.error('Failed to remove permission:', error);
+      alert('Failed to remove permission');
     }
   };
 
@@ -174,6 +290,11 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
     const hasChildren = folder.children && folder.children.length > 0;
     const hasDocuments = folder.documents && folder.documents.length > 0;
 
+    // FIX 3: Check if ALL nested resources have permissions
+    const { folders: allFolderIds, documents: allDocIds } = collectAllResourceIds(folder);
+    const allNestedHavePermission = allFolderIds.every(id => hasPermission('folder', id)) &&
+                                     allDocIds.every(id => hasPermission('document', id));
+
     return (
       <div key={folder.id} style={{ marginLeft: `${depth * 20}px` }}>
         <div style={{
@@ -182,8 +303,8 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
           padding: '0.5rem',
           borderRadius: '6px',
           marginBottom: '0.25rem',
-          background: permission ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
-          border: permission ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid transparent',
+          background: allNestedHavePermission ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
+          border: allNestedHavePermission ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid transparent',
           transition: 'all 0.2s'
         }}>
           {(hasChildren || hasDocuments) && (
@@ -202,10 +323,10 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
             </button>
           )}
           <span style={{ fontSize: '1rem', marginRight: '0.5rem' }}>
-            {permission ? '📂' : '📁'}
+            {allNestedHavePermission ? '📂' : '📁'}
           </span>
           <span style={{ flex: 1, fontSize: '0.9rem' }}>{folder.name}</span>
-          {permission && (
+          {allNestedHavePermission && (
             <span style={{
               fontSize: '0.7rem',
               background: '#4caf50',
@@ -214,7 +335,7 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
               borderRadius: '10px',
               marginRight: '0.5rem'
             }}>
-              ✓ Access
+              ✓ Full Access
             </span>
           )}
           <label style={{
@@ -226,8 +347,8 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
           }}>
             <input
               type="checkbox"
-              checked={!!permission}
-              onChange={() => handleTogglePermission('folder', folder.id, folder.name, permission)}
+              checked={allNestedHavePermission}
+              onChange={() => handleTogglePermission('folder', folder.id, folder.name, allNestedHavePermission ? permission : undefined, folder)}
               style={{ cursor: 'pointer' }}
             />
             Grant Access
@@ -408,7 +529,7 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
               Loading...
             </div>
           ) : selectedTab === 'assigned' ? (
-            // Assigned Access Tab
+            // FIX 3: Assigned Access Tab - Simplified, no edit/delete checkboxes
             <div>
               {member.role !== 'VIEWER' && (
                 <div style={{
@@ -463,56 +584,34 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
                           {perm.resourceName}
                         </div>
                         <div style={{ fontSize: '0.8rem', color: '#666' }}>
-                          {perm.type === 'folder' ? 'Folder' : 'File'}
+                          {perm.type === 'folder' ? 'Folder' : 'File'} • Can Edit
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        <label style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.3rem',
+                      <button
+                        onClick={() => handleRemovePermission(perm.id, perm.type, perm.resourceId)}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #f44336',
+                          color: '#f44336',
+                          borderRadius: '6px',
+                          padding: '0.5rem 1rem',
+                          cursor: 'pointer',
                           fontSize: '0.85rem',
-                          cursor: 'pointer'
-                        }}>
-                          <input
-                            type="checkbox"
-                            checked={perm.canEdit}
-                            onChange={(e) => handleUpdatePermission(perm.id, 'canEdit', e.target.checked)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                          Edit
-                        </label>
-                        <label style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.3rem',
-                          fontSize: '0.85rem',
-                          cursor: 'pointer'
-                        }}>
-                          <input
-                            type="checkbox"
-                            checked={perm.canDelete}
-                            onChange={(e) => handleUpdatePermission(perm.id, 'canDelete', e.target.checked)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                          Delete
-                        </label>
-                        <button
-                          onClick={() => handleTogglePermission(perm.type, perm.resourceId, perm.resourceName, perm)}
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #f44336',
-                            color: '#f44336',
-                            borderRadius: '6px',
-                            padding: '0.4rem',
-                            cursor: 'pointer',
-                            fontSize: '0.9rem'
-                          }}
-                          title="Revoke access"
-                        >
-                          🗑️
-                        </button>
-                      </div>
+                          fontWeight: '500',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#f44336';
+                          e.currentTarget.style.color = 'white';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = '#f44336';
+                        }}
+                        title="Revoke access"
+                      >
+                        Remove Access
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -530,8 +629,15 @@ const MemberPermissionManager: React.FC<MemberPermissionManagerProps> = ({
                 fontSize: '0.85rem',
                 color: '#f57f17'
               }}>
-                <strong>💡 Tip:</strong> Check folders/files to grant {member.user.name} specific access. 
+                <strong>💡 Tip:</strong> Check folders to grant {member.user.name} access to all files inside. 
+                Checking a folder will automatically select all nested folders and files.
                 {member.role === 'ADMIN' && ' Note: Admins already have full access.'}
+                {member.role === 'EDITOR' && (
+                  <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #fbc02d' }}>
+                    <strong>⚠️ Important for Editors:</strong> Root files (files not in any folder) are <strong>not editable by default</strong>. 
+                    You must explicitly grant access to individual root files.
+                  </div>
+                )}
               </div>
 
               <div style={{ 

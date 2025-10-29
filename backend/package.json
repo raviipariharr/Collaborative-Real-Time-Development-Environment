@@ -6,10 +6,9 @@
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",
     "build": "tsc ",
-    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "deploy": "npx prisma migrate deploy"
+    "deploy": "prism studio"
     
   },
   "engines": {

@@ -5,15 +5,13 @@ WORKDIR /app
 # Install OpenSSL (required for Prisma)
 RUN apk add --no-cache openssl libc6-compat
 
-# Copy package files first for better caching
+# Copy package files and Prisma schema BEFORE npm install
 COPY package*.json ./
 COPY tsconfig.json ./
-
-# Install dependencies
-RUN npm ci --only=production=false
-
-# Copy Prisma schema
 COPY prisma ./prisma/
+
+# Install ALL dependencies (including dev dependencies for build)
+RUN npm ci
 
 # Generate Prisma Client
 RUN npx prisma generate
@@ -24,7 +22,7 @@ COPY src ./src
 # Build TypeScript
 RUN npm run build
 
-# Remove dev dependencies for smaller image
+# Remove dev dependencies for smaller image (optional)
 RUN npm prune --production
 
 # Expose app port

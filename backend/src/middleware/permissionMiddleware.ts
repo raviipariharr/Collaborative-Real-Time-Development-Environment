@@ -59,7 +59,9 @@ export const checkDocumentPermission = async (
       where: { id: documentId },
       include: {
         project: {
-          include: {
+          select: {
+            id: true,
+            ownerId: true,
             members: {
               where: { userId: userId },
               select: { role: true }
@@ -74,7 +76,6 @@ export const checkDocumentPermission = async (
     }
 
     const isOwner = document.project.ownerId === userId;
-    const isDocOwner = document.ownerId === userId;
     const memberRole = document.project.members[0]?.role;
 
     // Read permission
@@ -86,8 +87,8 @@ export const checkDocumentPermission = async (
 
     // Write permission
     if (action === 'write') {
-      // Project owner, document owner, or ADMIN can write
-      if (isOwner || isDocOwner || memberRole === 'ADMIN') {
+      // Project owner or ADMIN can write
+      if (isOwner || memberRole === 'ADMIN') {
         next();
         return;
       }
@@ -120,7 +121,9 @@ export const checkFolderPermission = async (
       where: { id: folderId },
       include: {
         project: {
-          include: {
+          select: {
+            id: true,
+            ownerId: true,
             members: {
               where: { userId: userId },
               select: { role: true }
@@ -135,7 +138,6 @@ export const checkFolderPermission = async (
     }
 
     const isOwner = folder.project.ownerId === userId;
-    const isFolderOwner = folder.ownerId === userId;
     const memberRole = folder.project.members[0]?.role;
 
     if (action === 'read') {
@@ -144,7 +146,7 @@ export const checkFolderPermission = async (
     }
 
     if (action === 'write') {
-      if (isOwner || isFolderOwner || memberRole === 'ADMIN') {
+      if (isOwner || memberRole === 'ADMIN') {
         next();
         return;
       }

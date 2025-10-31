@@ -7,7 +7,8 @@
     "build": "tsc ",
     "render:build": "npm install && npm run prisma:generate && npm run build",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy"
+    "prisma:migrate": "prisma migrate deploy",
+    "postinstall": "prisma generate"
     
   },
   "engines": {

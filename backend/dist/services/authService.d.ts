@@ -8,13 +8,13 @@ export declare class AuthService {
     static verifyGoogleToken(token: string): Promise<GoogleTokenPayload>;
     static createOrUpdateUser(googleData: GoogleTokenPayload): Promise<{
         id: string;
-        name: string;
-        createdAt: Date;
-        updatedAt: Date;
-        googleId: string;
         email: string;
+        name: string;
+        googleId: string;
         avatar: string | null;
         role: import(".prisma/client").$Enums.UserRole;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     static generateTokens(userId: string): {
         accessToken: string;

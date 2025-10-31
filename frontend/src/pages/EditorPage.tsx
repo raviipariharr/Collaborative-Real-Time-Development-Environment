@@ -84,9 +84,9 @@ const EditorPage: React.FC = () => {
 
   // Saving 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-   const lastSaveContentRef = useRef<string>('');
+  const lastSaveContentRef = useRef<string>('');
   const prevDocId = useRef<string | null>(null);
-   //saving state
+  //saving state
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -97,15 +97,15 @@ const EditorPage: React.FC = () => {
 
   const canEditCurrentDoc = () => {
     if (!selectedDoc) return false;
-    
+
     // Owner and Admin can always edit
     if (isOwner || userRole === 'ADMIN') return true;
-    
-      // Check if there's a document-level permission (highest priority)
-  const docPermissions = documentPermissions.get(selectedDoc.id);
-  if (docPermissions !== undefined) {
-    return docPermissions;
-  }
+
+    // Check if there's a document-level permission (highest priority)
+    const docPermissions = documentPermissions.get(selectedDoc.id);
+    if (docPermissions !== undefined) {
+      return docPermissions;
+    }
 
     // Check folder-level permission
     if (selectedDoc.folderId) {
@@ -115,7 +115,7 @@ const EditorPage: React.FC = () => {
       }
       return false;
     }
-    
+
     // Default to role-based permission
     return false;
   };
@@ -157,7 +157,7 @@ const EditorPage: React.FC = () => {
     try {
       const data = await apiService.getProjectMembers(projectId!);
       setProjectMembers(data);
-      
+
       // Find current user's role
       const currentMember = data.find((m: ProjectMember) => m.userId === state.user?.id);
       if (currentMember) {
@@ -188,24 +188,24 @@ const EditorPage: React.FC = () => {
   }, [projectId, selectedDoc]);
 
   const loadDocumentPermissions = useCallback(async () => {
-  if (!selectedDoc || !state.user) return;
-  
-  try {
-    const perm = await apiService.checkDocumentEditPermission(selectedDoc.id);
-    setDocumentPermissions(prev => {
-      const newMap = new Map(prev);
-      newMap.set(selectedDoc.id, perm.canEdit);
-      return newMap;
-    });
-  } catch (error) {
-    console.error(`Failed to check permission for document ${selectedDoc.id}:`, error);
-    setDocumentPermissions(prev => {
-      const newMap = new Map(prev);
-      newMap.set(selectedDoc.id, false);
-      return newMap;
-    });
-  }
-}, [selectedDoc, state.user]);
+    if (!selectedDoc || !state.user) return;
+
+    try {
+      const perm = await apiService.checkDocumentEditPermission(selectedDoc.id);
+      setDocumentPermissions(prev => {
+        const newMap = new Map(prev);
+        newMap.set(selectedDoc.id, perm.canEdit);
+        return newMap;
+      });
+    } catch (error) {
+      console.error(`Failed to check permission for document ${selectedDoc.id}:`, error);
+      setDocumentPermissions(prev => {
+        const newMap = new Map(prev);
+        newMap.set(selectedDoc.id, false);
+        return newMap;
+      });
+    }
+  }, [selectedDoc, state.user]);
 
   const saveContent = useCallback(async (docId: string, content: string) => {
     // Don't save if already saving or content hasn't changed
@@ -238,7 +238,7 @@ const EditorPage: React.FC = () => {
       // Ensure data is an array
       const foldersArray = Array.isArray(data) ? data : [];
       setFolders(foldersArray);
-      
+
       // Load permissions for each folder
       if (foldersArray.length > 0 && state.user) {
         const permissionsMap = new Map<string, boolean>();
@@ -272,10 +272,10 @@ const EditorPage: React.FC = () => {
   }, [projectId, loadProject, loadDocuments, loadFolders, loadProjectMembers]);
 
   useEffect(() => {
-  if (selectedDoc) {
-    loadDocumentPermissions();
-  }
-}, [selectedDoc, loadDocumentPermissions]);
+    if (selectedDoc) {
+      loadDocumentPermissions();
+    }
+  }, [selectedDoc, loadDocumentPermissions]);
 
   // WebSocket connection
   useEffect(() => {
@@ -382,7 +382,7 @@ const EditorPage: React.FC = () => {
 
   const handleCreateFile = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!canEdit()) {
       alert('You do not have permission to create files');
       return;
@@ -417,7 +417,7 @@ const EditorPage: React.FC = () => {
 
   const handleCreateFolderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!canEdit()) {
       alert('You do not have permission to create folders');
       return;
@@ -642,17 +642,16 @@ const EditorPage: React.FC = () => {
           {/* Role Badge */}
           {userRole && (
             <div style={{
-              background: userRole === 'ADMIN' ? 'rgba(255,215,0,0.3)' : 
-                         userRole === 'EDITOR' ? 'rgba(76,175,80,0.3)' : 
-                         'rgba(158,158,158,0.3)',
+              background: userRole === 'ADMIN' ? 'rgba(255,215,0,0.3)' :
+                userRole === 'EDITOR' ? 'rgba(76,175,80,0.3)' :
+                  'rgba(158,158,158,0.3)',
               padding: 'clamp(0.3rem, 1vw, 0.4rem) clamp(0.5rem, 1.5vw, 0.8rem)',
               borderRadius: '20px',
               fontSize: 'clamp(0.7rem, 1.5vw, 0.85rem)',
-              border: `1px solid ${
-                userRole === 'ADMIN' ? 'rgba(255,215,0,0.6)' : 
-                userRole === 'EDITOR' ? 'rgba(76,175,80,0.6)' : 
-                'rgba(158,158,158,0.6)'
-              }`,
+              border: `1px solid ${userRole === 'ADMIN' ? 'rgba(255,215,0,0.6)' :
+                userRole === 'EDITOR' ? 'rgba(76,175,80,0.6)' :
+                  'rgba(158,158,158,0.6)'
+                }`,
               fontWeight: 'bold'
             }}>
               {isOwner ? '👑 Owner' : userRole}
@@ -818,80 +817,149 @@ const EditorPage: React.FC = () => {
         }}>
           {selectedDoc && (
             <div style={{
-              background: theme === 'dark' ? '#1e1e1e' : '#f3f3f3',
-              padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
-              color: theme === 'dark' ? 'white' : '#333',
-              fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)',
+              background: theme === 'dark' ? '#2d2d2d' : '#f8f9fa',
+              padding: 'clamp(0.6rem, 2vw, 0.75rem) clamp(0.75rem, 2vw, 1.5rem)',
+              color: theme === 'dark' ? '#e0e0e0' : '#333',
+              fontSize: 'clamp(0.85rem, 1.5vw, 0.95rem)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              borderBottom: `1px solid ${theme === 'dark' ? '#333' : '#ddd'}`,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              borderBottom: `2px solid ${theme === 'dark' ? '#444' : '#e0e0e0'}`,
               gap: '1rem',
-              whiteSpace: 'nowrap',
               flexWrap: 'wrap',
+              minHeight: '50px',
+              boxShadow: theme === 'dark'
+                ? '0 2px 4px rgba(0,0,0,0.3)'
+                : '0 1px 3px rgba(0,0,0,0.1)'
             }}>
-              <span
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  flex: '1 1 auto',
-                  minWidth: 0,
-                }}
-                title={selectedDoc.name}
-              >
-                {selectedDoc.name}
-              </span>
 
-              {/* Read-Only Indicator */}
-              {!canEditCurrentDoc() && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                flex: '1 1 auto',
+                minWidth: 0,
+              }}>
                 <span style={{
-                  background: '#ff9800',
-                  color: 'white',
-                  padding: '0.3rem 0.8rem',
-                  borderRadius: '12px',
-                  fontSize: 'clamp(0.7rem, 1vw, 0.75rem)',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.3rem',
+                  fontSize: '1.2rem',
                   flexShrink: 0
                 }}>
-                  🔒 READ-ONLY
+                  📄
                 </span>
-              )}
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontWeight: '600',
+                    fontSize: 'clamp(0.9rem, 2vw, 1rem)',
+                    color: theme === 'dark' ? '#fff' : '#1a1a1a'
+                  }}
+                  title={selectedDoc.name}
+                >
+                  {selectedDoc.name}
+                </span>
+              </div>
+              {/* Status Indicators */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                flexShrink: 0,
+                flexWrap: 'wrap'
+              }}>
+                {/* Read-Only Badge */}
+                {!canEditCurrentDoc() && (
+                  <span style={{
+                    background: theme === 'dark'
+                      ? 'rgba(255, 152, 0, 0.2)'
+                      : 'rgba(255, 152, 0, 0.15)',
+                    color: theme === 'dark' ? '#ffb74d' : '#e65100',
+                    padding: '0.4rem 0.8rem',
+                    borderRadius: '6px',
+                    fontSize: 'clamp(0.75rem, 1.2vw, 0.85rem)',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    border: `1.5px solid ${theme === 'dark' ? '#ff9800' : '#ff9800'}`,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}>
+                    <span style={{ fontSize: '1rem' }}>🔒</span>
+                    READ-ONLY
+                  </span>
+                )}
 
-              {/* Save Status */}
-              <span
-                style={{
-                  fontSize: 'clamp(0.7rem, 1vw, 0.8rem)',
-                  color: isSaving
-                    ? theme === 'dark'
-                      ? '#ffd700'
-                      : '#b58900'
-                    : !canEditCurrentDoc()
-                    ? '#ff9800'
-                    : theme === 'dark'
-                      ? '#00ff88'
-                      : '#007f5f',
+                {/* Divider */}
+                {!canEditCurrentDoc() && (
+                  <div style={{
+                    width: '1px',
+                    height: '24px',
+                    background: theme === 'dark' ? '#555' : '#ddd'
+                  }} />
+                )}
+
+                {/* Save Status */}
+                <div style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.4rem',
-                  flexShrink: 0,
-                }}
-              >
-                {!canEditCurrentDoc() ? (
-                  <>👁️ View Mode</>
-                ) : isSaving ? (
-                  <>⏳ Saving...</>
-                ) : lastSaved ? (
-                  <>✓ Saved {lastSaved.toLocaleTimeString()}</>
-                ) : (
-                  <>✓ All changes saved</>
-                )}
-              </span>
+                  gap: '0.5rem',
+                  padding: '0.4rem 0.8rem',
+                  borderRadius: '6px',
+                  background: !canEditCurrentDoc()
+                    ? theme === 'dark' ? 'rgba(158, 158, 158, 0.15)' : 'rgba(158, 158, 158, 0.1)'
+                    : isSaving
+                      ? theme === 'dark' ? 'rgba(255, 193, 7, 0.15)' : 'rgba(255, 193, 7, 0.1)'
+                      : theme === 'dark' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(76, 175, 80, 0.1)',
+                  border: `1.5px solid ${!canEditCurrentDoc()
+                      ? theme === 'dark' ? '#9e9e9e' : '#bdbdbd'
+                      : isSaving
+                        ? theme === 'dark' ? '#ffc107' : '#ffb300'
+                        : theme === 'dark' ? '#66bb6a' : '#4caf50'
+                    }`,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}>
+                  {/* Status Icon */}
+                  <span style={{
+                    fontSize: '1rem',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}>
+                    {!canEditCurrentDoc() ? '👁️' : isSaving ? '⏳' : '✓'}
+                  </span>
+
+                  {/* Status Text */}
+                  <span style={{
+                    fontSize: 'clamp(0.75rem, 1.2vw, 0.85rem)',
+                    fontWeight: '600',
+                    color: !canEditCurrentDoc()
+                      ? theme === 'dark' ? '#bdbdbd' : '#757575'
+                      : isSaving
+                        ? theme === 'dark' ? '#ffd54f' : '#f57f17'
+                        : theme === 'dark' ? '#81c784' : '#2e7d32',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {!canEditCurrentDoc() ? (
+                      'View Mode'
+                    ) : isSaving ? (
+                      'Saving...'
+                    ) : lastSaved ? (
+                      <>
+                        <span style={{ display: window.innerWidth < 640 ? 'none' : 'inline' }}>
+                          Saved{' '}
+                        </span>
+                        {lastSaved.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          ...(window.innerWidth >= 640 && { second: '2-digit' })
+                        })}
+                      </>
+                    ) : (
+                      'All changes saved'
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
           <Editor

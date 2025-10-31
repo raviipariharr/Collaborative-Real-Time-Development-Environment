@@ -64,7 +64,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
 
   // Define the handler once so it can be properly removed
   const handleNewMessage = (message: Message) => {
-    setMessages(prev => [...prev, message]);
+    setMessages(prev => {
+      // FIX: Check if message already exists to prevent duplicates
+      const exists = prev.some(m => m.id === message.id);
+      if (exists) return prev;
+      return [...prev, message];
+    });
 
     // Increment unread count if chat is closed and message is from someone else
     if (!isOpen && message.user.id !== currentUserId) {
@@ -120,7 +125,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
         message: newMessage
       });
 
-      setMessages(prev => [...prev, message]);
+      // FIX: Don't add message here - let socket handler do it
+      // This prevents duplicate messages
+      // setMessages(prev => [...prev, message]);
 
       if (socket) {
         socket.emit('send-chat-message', { projectId, message });

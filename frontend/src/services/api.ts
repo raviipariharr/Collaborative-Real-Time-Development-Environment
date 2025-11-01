@@ -100,13 +100,6 @@ export const apiService = {
     });
     return response.data;
   },
-
-  async sendChatMessage(data: { projectId: string; message: string }) {
-    const response = await axios.post(`${API_BASE_URL}/chat`, data, {
-      headers: getAuthHeaders()
-    });
-    return response.data;
-  },
    async markMessagesAsRead(projectId: string) {
     const response = await axios.post(`${API_BASE_URL}/chat/mark-read`, 
       { projectId },
@@ -304,5 +297,17 @@ async revokeDocumentPermission(documentId: string, userId: string) {
   return response.data;
 },
 
+async sendChatMessage(data: { projectId: string; message: string; replyToId?: string; audioData?: string }) {
+  const response = await axios.post(`${API_BASE_URL}/chat`, data, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
 
+async deleteChatMessage(messageId: string) {
+  const response = await axios.delete(`${API_BASE_URL}/chat/${messageId}`, {
+    headers: getAuthHeaders()
+  });
+  return response.data;
+},
 };

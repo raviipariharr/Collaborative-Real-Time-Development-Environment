@@ -50,12 +50,11 @@ router.get('/project/:projectId', async (req: AuthRequest, res) => {
 router.post('/', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
-    const { projectId, message } = req.body;
+    const { projectId, message, replyToId, audioData } = req.body;
 
     if (!projectId || !message || message.trim().length === 0) {
       return res.status(400).json({ error: 'Project ID and message are required' });
     }
-    
 
     // Check access
     const hasAccess = await prisma.project.findFirst({
@@ -76,7 +75,8 @@ router.post('/', async (req: AuthRequest, res) => {
       data: {
         projectId,
         userId,
-        message: message.trim()
+        message: message.trim(),
+        // Store replyToId and audioData if you add these fields to schema
       },
       include: {
         user: {
@@ -89,6 +89,49 @@ router.post('/', async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error sending message:', error);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Delete chat message
+router.delete('/:messageId', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { messageId } = req.params;
+
+    // Find the message
+    const message = await prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      include: {
+        project: {
+          include: {
+            members: { where: { userId } }
+          }
+        }
+      }
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // Check if user is message owner, project owner, or admin
+    const isMessageOwner = message.userId === userId;
+    const isProjectOwner = message.project.ownerId === userId;
+    const isAdmin = message.project.members.some(m => m.userId === userId && m.role === 'ADMIN');
+
+    if (!isMessageOwner && !isProjectOwner && !isAdmin) {
+      return res.status(403).json({ error: 'You can only delete your own messages' });
+    }
+
+    // Delete the message
+    await prisma.chatMessage.delete({
+      where: { id: messageId }
+    });
+
+    res.json({ success: true, messageId });
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
   }
 });
 
@@ -110,6 +153,7 @@ router.post('/mark-read', async (req: AuthRequest, res) => {
         NOT: { readBy: { has: userId } }  // Not read by current user
       }
     });
+    
     await Promise.all(
       unreadMessages.map(msg =>
         prisma.chatMessage.update({
@@ -129,6 +173,7 @@ router.post('/mark-read', async (req: AuthRequest, res) => {
     res.status(500).json({ error: 'Failed to mark messages as read' });
   }
 });
+
 // Get unread count
 router.get('/unread-count/:projectId', async (req: AuthRequest, res) => {
   try {
@@ -142,10 +187,12 @@ router.get('/unread-count/:projectId', async (req: AuthRequest, res) => {
         NOT: { readBy: { has: userId } }
       }
     });
+    
     res.json({ unreadCount });
   } catch (error) {
     console.error('Error getting unread count:', error);
     res.status(500).json({ error: 'Failed to get unread count' });
   }
 });
+
 export default router;

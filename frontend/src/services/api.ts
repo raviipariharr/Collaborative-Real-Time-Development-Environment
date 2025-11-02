@@ -310,4 +310,13 @@ async deleteChatMessage(messageId: string) {
   });
   return response.data;
 },
+
+async pinChatMessage(messageId: string, isPinned: boolean) {
+  const response = await axios.put(`${API_BASE_URL}/chat/${messageId}/pin`, 
+    { isPinned },
+    { headers: getAuthHeaders() }
+  );
+  return response.data;
+}
+
 };

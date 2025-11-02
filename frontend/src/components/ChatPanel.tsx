@@ -9,6 +9,8 @@ interface Message {
   message: string;
   createdAt: string;
   readBy: string[];
+  isPinned?: boolean;
+  audioData?: string;
   user: {
     id: string;
     name: string;
@@ -29,6 +31,7 @@ interface ChatPanelProps {
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -37,17 +40,21 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
   const [replyingTo, setReplyingTo] = useState<{ id: string; message: string; userName: string } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [showPinnedPanel, setShowPinnedPanel] = useState(false);
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
 
   const loadMessages = useCallback(async () => {
     try {
       const data = await apiService.getProjectMessages(projectId);
       setMessages(data);
+      setPinnedMessages(data.filter((m: Message) => m.isPinned));
     } catch (error) {
       console.error('Failed to load messages:', error);
     }
@@ -91,19 +98,32 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
 
     const handleDeleteMessage = (data: { messageId: string }) => {
       setMessages(prev => prev.filter(m => m.id !== data.messageId));
+      setPinnedMessages(prev => prev.filter(m => m.id !== data.messageId));
+    };
+
+    const handlePinMessage = (data: { messageId: string; isPinned: boolean }) => {
+      setMessages(prev => prev.map(m => 
+        m.id === data.messageId ? { ...m, isPinned: data.isPinned } : m
+      ));
+      if (data.isPinned) {
+        const msg = messages.find(m => m.id === data.messageId);
+        if (msg) setPinnedMessages(prev => [...prev, { ...msg, isPinned: true }]);
+      } else {
+        setPinnedMessages(prev => prev.filter(m => m.id !== data.messageId));
+      }
     };
 
     socket.emit('join-project-chat', projectId);
-    socket.off('new-chat-message', handleNewMessage);
     socket.on('new-chat-message', handleNewMessage);
-    socket.off('delete-chat-message', handleDeleteMessage);
     socket.on('delete-chat-message', handleDeleteMessage);
+    socket.on('pin-chat-message', handlePinMessage);
 
     return () => {
       socket.off('new-chat-message', handleNewMessage);
       socket.off('delete-chat-message', handleDeleteMessage);
+      socket.off('pin-chat-message', handlePinMessage);
     };
-  }, [socket, projectId, isOpen, currentUserId]);
+  }, [socket, projectId, isOpen, currentUserId, messages]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -167,6 +187,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     try {
       await apiService.deleteChatMessage(messageId);
       setMessages(prev => prev.filter(m => m.id !== messageId));
+      setPinnedMessages(prev => prev.filter(m => m.id !== messageId));
       
       if (socket) {
         socket.emit('delete-chat-message', { projectId, messageId });
@@ -179,10 +200,38 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     }
   };
 
+  const handlePinMessage = async (messageId: string) => {
+    try {
+      const msg = messages.find(m => m.id === messageId);
+      if (!msg) return;
+
+      const newPinnedState = !msg.isPinned;
+      await apiService.pinChatMessage(messageId, newPinnedState);
+
+      setMessages(prev => prev.map(m => 
+        m.id === messageId ? { ...m, isPinned: newPinnedState } : m
+      ));
+
+      if (newPinnedState) {
+        setPinnedMessages(prev => [...prev, { ...msg, isPinned: true }]);
+      } else {
+        setPinnedMessages(prev => prev.filter(m => m.id !== messageId));
+      }
+
+      if (socket) {
+        socket.emit('pin-chat-message', { projectId, messageId, isPinned: newPinnedState });
+      }
+
+      setShowContextMenu(null);
+    } catch (error) {
+      console.error('Failed to pin message:', error);
+      alert('Failed to pin message');
+    }
+  };
+
   const handleCopyMessage = (message: string) => {
     navigator.clipboard.writeText(message);
     setShowContextMenu(null);
-    // Optional: Show toast notification
   };
 
   const handleReplyMessage = (msg: Message) => {
@@ -256,7 +305,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
 
   const sendVoiceMessage = async (audioBlob: Blob) => {
     try {
-      // Convert blob to base64 or upload to storage
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       reader.onloadend = async () => {
@@ -277,6 +325,48 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     }
   };
 
+  const playAudio = (messageId: string, audioData: string) => {
+    if (playingAudio && playingAudio !== messageId) {
+      const prevAudio = audioRefs.current.get(playingAudio);
+      if (prevAudio) {
+        prevAudio.pause();
+        prevAudio.currentTime = 0;
+      }
+    }
+
+    let audio = audioRefs.current.get(messageId);
+    
+    if (!audio) {
+      audio = new Audio(audioData);
+      audioRefs.current.set(messageId, audio);
+      
+      audio.onended = () => {
+        setPlayingAudio(null);
+      };
+    }
+
+    if (playingAudio === messageId) {
+      audio.pause();
+      audio.currentTime = 0;
+      setPlayingAudio(null);
+    } else {
+      audio.play();
+      setPlayingAudio(messageId);
+    }
+  };
+
+  const scrollToMessage = (messageId: string) => {
+    const element = document.getElementById(`msg-${messageId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.style.animation = 'highlight 1s ease-in-out';
+      setTimeout(() => {
+        element.style.animation = '';
+      }, 1000);
+    }
+    setShowPinnedPanel(false);
+  };
+
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -288,9 +378,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const findOriginalMessage = (replyToId: string) => {
+    return messages.find(m => m.id === replyToId);
+  };
+
   return (
     <>
-      {/* Chat Toggle Button */}
       <button onClick={() => setIsOpen(!isOpen)}
         style={{
           position: 'fixed',
@@ -332,7 +425,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
         )}
       </button>
 
-      {/* Chat Panel */}
       {isOpen && (
         <div style={{
           position: 'fixed',
@@ -347,7 +439,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
           flexDirection: 'column',
           zIndex: 999
         }}>
-          {/* Header */}
           <div style={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white',
@@ -358,21 +449,100 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
             alignItems: 'center'
           }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Team Chat</h3>
-            <button
-              onClick={() => setIsOpen(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '1.2rem'
-              }}
-            >
-              ✕
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {pinnedMessages.length > 0 && (
+                <button
+                  onClick={() => setShowPinnedPanel(!showPinnedPanel)}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.25rem'
+                  }}
+                  title="View pinned messages"
+                >
+                  📌 {pinnedMessages.length}
+                </button>
+              )}
+              <button
+                onClick={() => setIsOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem'
+                }}
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
-          {/* Messages */}
+          {showPinnedPanel && pinnedMessages.length > 0 && (
+            <div style={{
+              background: '#fff9e6',
+              borderBottom: '2px solid #ffd700',
+              maxHeight: '150px',
+              overflowY: 'auto',
+              padding: '0.5rem'
+            }}>
+              <div style={{
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                color: '#666',
+                marginBottom: '0.5rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>PINNED MESSAGES</span>
+                <button
+                  onClick={() => setShowPinnedPanel(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    color: '#666'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              {pinnedMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  onClick={() => scrollToMessage(msg.id)}
+                  style={{
+                    background: 'white',
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    marginBottom: '0.5rem',
+                    cursor: 'pointer',
+                    border: '1px solid #ffd700',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                >
+                  <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#667eea', marginBottom: '0.25rem' }}>
+                    {msg.user.name}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {msg.message}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{
             flex: 1,
             overflowY: 'auto',
@@ -390,8 +560,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
             ) : (
               messages.map((msg) => {
                 const isOwnMessage = msg.user.id === currentUserId;
+                const originalReplyMsg = msg.replyTo ? findOriginalMessage(msg.replyTo.id) : null;
+                
                 return (
                   <div
+                    id={`msg-${msg.id}`}
                     key={msg.id}
                     style={{
                       marginBottom: '1rem',
@@ -404,7 +577,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                     onMouseLeave={() => setHoveredMessageId(null)}
                     onContextMenu={(e) => handleContextMenu(e, msg.id)}
                   >
-                    {/* Avatar */}
                     {!isOwnMessage && (
                       <div style={{
                         width: '32px',
@@ -423,7 +595,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                       </div>
                     )}
 
-                    {/* Message Bubble */}
                     <div style={{
                       maxWidth: '70%',
                       display: 'flex',
@@ -440,24 +611,29 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                         </span>
                       )}
 
-                      {/* Reply Preview */}
                       {msg.replyTo && (
-                        <div style={{
-                          background: 'rgba(0,0,0,0.1)',
-                          padding: '0.4rem 0.6rem',
-                          borderRadius: '6px',
-                          marginBottom: '0.3rem',
-                          fontSize: '0.75rem',
-                          borderLeft: '2px solid #667eea',
-                          maxWidth: '100%',
-                          wordBreak: 'break-word'
-                        }}>
-                          <div style={{ fontWeight: 'bold', marginBottom: '0.1rem' }}>
-                            {msg.replyTo.userName}
+                        <div 
+                          onClick={() => scrollToMessage(msg.replyTo!.id)}
+                          style={{
+                            background: 'rgba(0,0,0,0.1)',
+                            padding: '0.4rem 0.6rem',
+                            borderRadius: '6px',
+                            marginBottom: '0.3rem',
+                            fontSize: '0.75rem',
+                            borderLeft: '2px solid #667eea',
+                            maxWidth: '100%',
+                            wordBreak: 'break-word',
+                            cursor: 'pointer',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.15)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
+                        >
+                          <div style={{ fontWeight: 'bold', marginBottom: '0.1rem', color: '#667eea' }}>
+                            ↩️ {msg.replyTo.userName}
                           </div>
                           <div style={{ opacity: 0.8 }}>
-                            {msg.replyTo.message.substring(0, 50)}
-                            {msg.replyTo.message.length > 50 ? '...' : ''}
+                            {originalReplyMsg ? originalReplyMsg.message : msg.replyTo.message}
                           </div>
                         </div>
                       )}
@@ -470,9 +646,73 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                         wordBreak: 'break-word',
                         position: 'relative'
                       }}>
-                        {msg.message}
+                        {msg.isPinned && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '-8px',
+                            right: isOwnMessage ? 'auto' : '-8px',
+                            left: isOwnMessage ? '-8px' : 'auto',
+                            background: '#ffd700',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.7rem',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                          }}>
+                            📌
+                          </div>
+                        )}
                         
-                        {/* Hover Arrow */}
+                        {msg.message.includes('🎤 Voice message') || msg.audioData ? (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                          }}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (msg.audioData) {
+                                  playAudio(msg.id, msg.audioData);
+                                } else {
+                                  alert('Audio data not available');
+                                }
+                              }}
+                              style={{
+                                background: isOwnMessage ? 'rgba(255,255,255,0.2)' : 'rgba(102,126,234,0.2)',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '36px',
+                                height: '36px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '1rem',
+                                color: isOwnMessage ? 'white' : '#667eea',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = isOwnMessage ? 'rgba(255,255,255,0.3)' : 'rgba(102,126,234,0.3)';
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = isOwnMessage ? 'rgba(255,255,255,0.2)' : 'rgba(102,126,234,0.2)';
+                                e.currentTarget.style.transform = 'scale(1)';
+                              }}
+                              title={msg.audioData ? 'Play voice message' : 'Audio not available'}
+                            >
+                              {playingAudio === msg.id ? '⏸️' : '▶️'}
+                            </button>
+                            <span style={{ fontSize: '0.9rem' }}>🎤 Voice message</span>
+                          </div>
+                        ) : (
+                          msg.message
+                        )}
+                        
                         {hoveredMessageId === msg.id && (
                           <button
                             onClick={(e) => handleContextMenu(e as any, msg.id)}
@@ -514,7 +754,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Reply Preview */}
           {replyingTo && (
             <div style={{
               background: '#e8eaf6',
@@ -553,7 +792,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
             </div>
           )}
 
-          {/* Recording UI */}
           {isRecording && (
             <div style={{
               background: '#fff3e0',
@@ -582,7 +820,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                   border: 'none',
                   borderRadius: '6px',
                   padding: '0.5rem 1rem',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
                 }}
               >
                 Cancel
@@ -595,7 +834,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                   border: 'none',
                   borderRadius: '6px',
                   padding: '0.5rem 1rem',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
                 }}
               >
                 Send
@@ -603,7 +843,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
             </div>
           )}
 
-          {/* Input */}
           {!isRecording && (
             <form onSubmit={handleSendMessage} style={{
               padding: '1rem',
@@ -626,7 +865,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                   fontSize: '1.2rem',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#5568d3';
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#667eea';
+                  e.currentTarget.style.transform = 'scale(1)';
                 }}
                 title="Record voice message"
               >
@@ -642,7 +890,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                   padding: '0.75rem',
                   border: '1px solid #ddd',
                   borderRadius: '20px',
-                  outline: 'none'
+                  outline: 'none',
+                  fontSize: '0.9rem'
                 }}
               />
               <button
@@ -658,7 +907,21 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                   cursor: newMessage.trim() ? 'pointer' : 'not-allowed',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  fontSize: '1.2rem',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (newMessage.trim()) {
+                    e.currentTarget.style.background = '#5568d3';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (newMessage.trim()) {
+                    e.currentTarget.style.background = '#667eea';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }
                 }}
               >
                 ➤
@@ -668,7 +931,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
         </div>
       )}
 
-      {/* Context Menu */}
       {showContextMenu && (
         <div
           ref={contextMenuRef}
@@ -681,31 +943,30 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             zIndex: 1000,
             overflow: 'hidden',
-            minWidth: '150px'
+            minWidth: '150px',
+            border: '1px solid #e0e0e0'
           }}
         >
-          {messages.find(m => m.id === showContextMenu.messageId)?.user.id === currentUserId && (
-            <button
-              onClick={() => handleDeleteMessage(showContextMenu.messageId)}
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                background: 'transparent',
-                border: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                color: '#f44336',
-                fontSize: '0.9rem'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              🗑️ Delete
-            </button>
-          )}
+          <button
+            onClick={() => handlePinMessage(showContextMenu.messageId)}
+            style={{
+              width: '100%',
+              padding: '0.75rem 1rem',
+              background: 'transparent',
+              border: 'none',
+              textAlign: 'left',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.9rem',
+              color: '#333'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            📌 {messages.find(m => m.id === showContextMenu.messageId)?.isPinned ? 'Unpin' : 'Pin'}
+          </button>
           <button
             onClick={() => {
               const msg = messages.find(m => m.id === showContextMenu.messageId);
@@ -721,7 +982,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              fontSize: '0.9rem'
+              fontSize: '0.9rem',
+              color: '#333'
             }}
             onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -743,21 +1005,51 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              fontSize: '0.9rem'
+              fontSize: '0.9rem',
+              color: '#333'
             }}
             onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
             📋 Copy
           </button>
+          {messages.find(m => m.id === showContextMenu.messageId)?.user.id === currentUserId && (
+            <>
+              <div style={{ height: '1px', background: '#e0e0e0', margin: '0.25rem 0' }} />
+              <button
+                onClick={() => handleDeleteMessage(showContextMenu.messageId)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#f44336',
+                  fontSize: '0.9rem'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244,67,54,0.1)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                🗑️ Delete
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {/* CSS Animations */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
+        }
+        
+        @keyframes highlight {
+          0%, 100% { background: transparent; }
+          50% { background: rgba(255, 215, 0, 0.3); }
         }
       `}</style>
     </>

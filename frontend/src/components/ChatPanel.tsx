@@ -30,6 +30,7 @@ interface ChatPanelProps {
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId }) => {
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -42,7 +43,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
   const [recordingTime, setRecordingTime] = useState(0);
   const [showPinnedPanel, setShowPinnedPanel] = useState(false);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -102,7 +103,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     };
 
     const handlePinMessage = (data: { messageId: string; isPinned: boolean }) => {
-      setMessages(prev => prev.map(m => 
+      setMessages(prev => prev.map(m =>
         m.id === data.messageId ? { ...m, isPinned: data.isPinned } : m
       ));
       if (data.isPinned) {
@@ -188,11 +189,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
       await apiService.deleteChatMessage(messageId);
       setMessages(prev => prev.filter(m => m.id !== messageId));
       setPinnedMessages(prev => prev.filter(m => m.id !== messageId));
-      
+
       if (socket) {
         socket.emit('delete-chat-message', { projectId, messageId });
       }
-      
+
       setShowContextMenu(null);
     } catch (error) {
       console.error('Failed to delete message:', error);
@@ -208,7 +209,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
       const newPinnedState = !msg.isPinned;
       await apiService.pinChatMessage(messageId, newPinnedState);
 
-      setMessages(prev => prev.map(m => 
+      setMessages(prev => prev.map(m =>
         m.id === messageId ? { ...m, isPinned: newPinnedState } : m
       ));
 
@@ -252,19 +253,66 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     });
   };
 
+  const base64ToBlob = (base64: string) => {
+  const parts = base64.split(",");
+  if (parts.length !== 2) {
+    throw new Error("Invalid base64 audio format");
+  }
+
+  const mimeMatch = parts[0].match(/data:(.*?);base64/);
+  if (!mimeMatch) {
+    throw new Error("Invalid base64 MIME header");
+  }
+
+  const mime = mimeMatch[1];
+  const binary = atob(parts[1]);
+  const array = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    array[i] = binary.charCodeAt(i);
+  }
+
+  return new Blob([array], { type: mime });
+};
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+
+      const pickMimeType = () => {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          return "audio/webm;codecs=opus";
+        }
+        if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+          return "audio/ogg;codecs=opus";
+        }
+        if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          return "audio/mp4";
+        }
+        return "";
+      };
+
+      const mimeType = pickMimeType();
+
+      const mediaRecorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
+
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
+      console.log("Recording with mimeType:", mimeType);
+
       mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        console.log('Audio blob created:', audioBlob.size, 'bytes, type:', audioBlob.type);
         await sendVoiceMessage(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -278,7 +326,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
       }, 1000);
     } catch (error) {
       console.error('Failed to start recording:', error);
-      alert('Microphone access denied');
+      alert('Microphone access denied or not available');
     }
   };
 
@@ -309,23 +357,33 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
       reader.readAsDataURL(audioBlob);
       reader.onloadend = async () => {
         const base64Audio = reader.result as string;
-        
+        console.log('Base64 audio length:', base64Audio.length);
+        console.log('Audio data starts with:', base64Audio.substring(0, 50));
+
         const message = await apiService.sendChatMessage({
           projectId,
           message: '🎤 Voice message',
           audioData: base64Audio
         });
 
+        console.log('Voice message sent:', message);
+
         if (socket) {
           socket.emit('send-chat-message', { projectId, message });
         }
       };
+      reader.onerror = (error) => {
+        console.error('Failed to read audio blob:', error);
+        alert('Failed to process voice message');
+      };
     } catch (error) {
       console.error('Failed to send voice message:', error);
+      alert('Failed to send voice message');
     }
   };
 
   const playAudio = (messageId: string, audioData: string) => {
+    // Stop currently playing audio
     if (playingAudio && playingAudio !== messageId) {
       const prevAudio = audioRefs.current.get(playingAudio);
       if (prevAudio) {
@@ -335,13 +393,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
     }
 
     let audio = audioRefs.current.get(messageId);
-    
+
     if (!audio) {
-      audio = new Audio(audioData);
+      const blob = base64ToBlob(audioData);
+      const url = URL.createObjectURL(blob);
+      audio = new Audio(url);
+      audio.volume = 1.0; // Set volume to maximum
       audioRefs.current.set(messageId, audio);
-      
+
       audio.onended = () => {
         setPlayingAudio(null);
+      };
+
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
+        alert('Failed to play audio. The audio format may be unsupported.');
+        setPlayingAudio(null);
+      };
+
+      audio.onloadeddata = () => {
+        console.log('Audio loaded successfully');
       };
     }
 
@@ -350,8 +421,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
       audio.currentTime = 0;
       setPlayingAudio(null);
     } else {
-      audio.play();
-      setPlayingAudio(messageId);
+      audio.play()
+        .then(() => {
+          console.log('Audio playing');
+          setPlayingAudio(messageId);
+        })
+        .catch((error) => {
+          console.error('Play failed:', error);
+          alert('Failed to play audio: ' + error.message);
+          setPlayingAudio(null);
+        });
     }
   };
 
@@ -561,7 +640,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
               messages.map((msg) => {
                 const isOwnMessage = msg.user.id === currentUserId;
                 const originalReplyMsg = msg.replyTo ? findOriginalMessage(msg.replyTo.id) : null;
-                
+
                 return (
                   <div
                     id={`msg-${msg.id}`}
@@ -612,7 +691,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                       )}
 
                       {msg.replyTo && (
-                        <div 
+                        <div
                           onClick={() => scrollToMessage(msg.replyTo!.id)}
                           style={{
                             background: 'rgba(0,0,0,0.1)',
@@ -665,7 +744,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                             📌
                           </div>
                         )}
-                        
+
                         {msg.message.includes('🎤 Voice message') || msg.audioData ? (
                           <div style={{
                             display: 'flex',
@@ -712,7 +791,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                         ) : (
                           msg.message
                         )}
-                        
+
                         {hoveredMessageId === msg.id && (
                           <button
                             onClick={(e) => handleContextMenu(e as any, msg.id)}
@@ -768,7 +847,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ projectId, socket, currentUserId 
                 <div style={{ fontWeight: 'bold', color: '#667eea' }}>
                   Replying to {replyingTo.userName}
                 </div>
-                <div style={{ 
+                <div style={{
                   color: '#666',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

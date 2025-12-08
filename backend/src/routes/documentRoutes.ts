@@ -259,7 +259,7 @@ router.put('/:id/rename', async (req: AuthRequest, res) => {
   }
 });
 
-// Save document content - FIX 3: PROPER PERMISSION CHECK FOR ROOT FILES
+// Save document content - FIXED PERMISSION CHECK
 router.put('/:id/content', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId;
@@ -292,33 +292,59 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
     const member = document.project.members[0];
     const memberRole = member?.role;
 
-    // FIX 3: STRICT permission logic - NO DEFAULT ACCESS FOR EDITORS
+    // FIXED LOGIC: Check permissions in the correct order with proper priority
     let canEdit = false;
+
+    console.log(`\n🔍 Checking edit permission for document ${id}:`);
+    console.log(`   - User: ${userId}`);
+    console.log(`   - Is Owner: ${isProjectOwner}`);
+    console.log(`   - Member Role: ${memberRole}`);
+    console.log(`   - Document Permissions: ${JSON.stringify(document.permissions)}`);
+    console.log(`   - In Folder: ${document.folderId}`);
 
     // 1. Owner and Admin ALWAYS have edit access
     if (isProjectOwner || memberRole === 'ADMIN') {
+      console.log(`✅ Access granted: Owner or Admin`);
       canEdit = true;
     } 
-    // 2. Check document-level permission (explicit grant for this file)
+    // 2. Check document-level permission FIRST (highest priority for specific access)
     else if (document.permissions.length > 0 && document.permissions[0].canEdit) {
+      console.log(`✅ Access granted: Explicit document permission (canEdit: ${document.permissions[0].canEdit})`);
       canEdit = true;
     }
     // 3. If document is in a folder, check folder permission
     else if (document.folderId && document.folder) {
       const folderPerm = document.folder.permissions[0];
+      console.log(`   - Folder Permission: ${JSON.stringify(folderPerm)}`);
       if (folderPerm?.canEdit) {
+        console.log(`✅ Access granted: Folder permission`);
         canEdit = true;
+      } else {
+        console.log(`❌ Access denied: No folder permission`);
       }
-      // No folder permission = cannot edit, even for EDITOR role
     }
-    // 4. ROOT FILE (no folder): REQUIRE explicit document permission
-    // EDITORS do NOT have automatic access to root files
-    else if (!document.folderId) {
-      // Root files are NOT editable by default, even for EDITOR role
-      canEdit = false;
+    // 4. For EDITOR role: Allow editing documents in folders they have access to
+    // But ROOT files (no folder) require explicit permission
+    else if (memberRole === 'EDITOR') {
+      if (document.folderId) {
+        // Editor trying to edit a file in a folder without explicit permission
+        console.log(`❌ Access denied: EDITOR lacks folder permission for ${document.folderId}`);
+        canEdit = false;
+      } else {
+        // Editor trying to edit a root file without explicit permission
+        console.log(`❌ Access denied: EDITOR lacks explicit permission for root file ${id}`);
+        canEdit = false;
+      }
+    } else {
+      console.log(`❌ Access denied: No applicable permissions found`);
     }
 
     if (!canEdit) {
+      console.log(`❌ Permission denied for user ${userId} on document ${id}`);
+      console.log(`   - Role: ${memberRole}`);
+      console.log(`   - Document permissions: ${document.permissions.length}`);
+      console.log(`   - Folder permissions: ${document.folder?.permissions.length || 0}`);
+      
       return res.status(403).json({ 
         error: 'You do not have permission to edit this document',
         reason: document.folderId 
@@ -328,6 +354,8 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
         canEdit: false
       });
     }
+
+    console.log(`✅ Permission granted for user ${userId} on document ${id}`);
 
     const updated = await prisma.document.update({
       where: { id },

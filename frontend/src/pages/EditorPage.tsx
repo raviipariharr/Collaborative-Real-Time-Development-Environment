@@ -103,8 +103,8 @@ const EditorPage: React.FC = () => {
 
     // Check if there's a document-level permission (highest priority)
     const docPermissions = documentPermissions.get(selectedDoc.id);
-    if (docPermissions !== undefined) {
-      return docPermissions;
+    if (docPermissions ==true ) {
+      return true;
     }
 
     // Check folder-level permission

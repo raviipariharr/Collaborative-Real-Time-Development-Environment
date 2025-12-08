@@ -78,11 +78,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
+  max: process.env.NODE_ENV === 'production' ? 500 : 1000,
   message: { error: 'Too many requests' },
+  standardHeaders: true,
+  legacyHeaders: false,
   skip: (req) => {
     // Skip rate limiting for localhost in development
     if (process.env.NODE_ENV !== 'production') {
+      return true;
+    }
+    if (req.path === '/health') {
       return true;
     }
     return false;

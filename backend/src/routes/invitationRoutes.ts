@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma'; // CHANGED: Import singleton
 import crypto from 'crypto';
 
 const router = Router();
-const prisma = new PrismaClient();
+// REMOVED: const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
@@ -156,20 +156,22 @@ router.post('/:id/accept', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invitation has expired' });
     }
 
-    // Add user as project member
-    await prisma.projectMember.create({
-      data: {
-        projectId: invitation.projectId,
-        userId: userId,
-        role: invitation.role
-      }
-    });
-
-    // Mark invitation as accepted
-    await prisma.projectInvitation.update({
-      where: { id: invitationId },
-      data: { status: 'ACCEPTED' }
-    });
+    // Use transaction for atomic operations
+    await prisma.$transaction([
+      // Add user as project member
+      prisma.projectMember.create({
+        data: {
+          projectId: invitation.projectId,
+          userId: userId,
+          role: invitation.role
+        }
+      }),
+      // Mark invitation as accepted
+      prisma.projectInvitation.update({
+        where: { id: invitationId },
+        data: { status: 'ACCEPTED' }
+      })
+    ]);
 
     res.json({
       message: 'Invitation accepted successfully',

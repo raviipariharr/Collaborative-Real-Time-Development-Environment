@@ -3,7 +3,7 @@ import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 router.use(authMiddleware);
 
@@ -18,7 +18,7 @@ router.get('/', async (req: AuthRequest, res) => {
           { ownerId: userId },
           { members: { some: { userId: userId } } },
           { isPublic: true }
-        ]
+        ]  
       },
       include: {
         owner: { select: { id: true, name: true, email: true, avatar: true } },

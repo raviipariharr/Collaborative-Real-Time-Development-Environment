@@ -4,7 +4,7 @@ import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
-import prisma from '../lib/prisma';
+const prisma = new PrismaClient();
 
 // Google OAuth login
 router.post('/google', async (req, res) => {

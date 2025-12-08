@@ -7,7 +7,7 @@ import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import dotenv from 'dotenv';
-import prisma from './lib/prisma'; // CHANGED: Use singleton
+import { PrismaClient } from '@prisma/client';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -21,8 +21,12 @@ import folderPermissionRoutes from './routes/folderPermissionRoutes';
 import memberPermissionRoutes from './routes/memberPermissionRoutes';
 import documentPermissionRoutes from './routes/documentPermissionRoutes';
 
+
 // Load environment variables
 dotenv.config();
+
+// Initialize Prisma
+const prisma = new PrismaClient();
 
 const app = express();
 const server = createServer(app);
@@ -40,12 +44,7 @@ const io = new SocketIOServer(server, {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true
-  },
-  // ADDED: Optimize Socket.IO
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  transports: ['websocket', 'polling'],
-  allowEIO3: true
+  }
 });
 
 // Middleware
@@ -55,16 +54,12 @@ app.use(helmet({
 }));
 
 app.use(compression());
-
-// ADDED: Trust proxy for Render
-app.set('trust proxy', 1);
-
-// Optimize morgan logging
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(morgan('combined'));
 
 // CORS with dynamic origin checking
 app.use(cors({
   origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
@@ -80,45 +75,40 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// IMPROVED: Separate rate limiters for different endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 10 : 100, // Strict for auth
-  message: { error: 'Too many authentication attempts' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 500 : 1000, // More lenient for API
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
   message: { error: 'Too many requests' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => process.env.NODE_ENV !== 'production'
+  skip: (req) => {
+    // Skip rate limiting for localhost in development
+    if (process.env.NODE_ENV !== 'production') {
+      return true;
+    }
+    return false;
+  }
 });
 
-// Apply rate limiters
-app.use('/api/auth', authLimiter);
 if (process.env.NODE_ENV === 'production') {
-  app.use('/api', apiLimiter);
+app.use('/api/', limiter);
+} else {
+  // In development, only limit auth routes
+  app.use('/api/auth/', limiter);
+  console.log('⚠️  Rate limiting disabled for development (except auth)');
 }
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
   try {
-    // Quick DB check
-    await prisma.$queryRaw`SELECT 1`;
+    await prisma.$connect();
     const userCount = await prisma.user.count();
-    
     res.json({
       status: 'OK',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       database: 'Connected',
       users: userCount,
-      environment: process.env.NODE_ENV || 'development',
-      uptime: process.uptime()
+      environment: process.env.NODE_ENV || 'development'
     });
   } catch (error) {
     res.status(500).json({
@@ -161,11 +151,6 @@ app.use('/api/folder-permissions', folderPermissionRoutes);
 app.use('/api/member-permissions', memberPermissionRoutes);
 app.use('/api/document-permissions', documentPermissionRoutes);
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
@@ -175,29 +160,25 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-// Socket.IO connection handling with optimization
-const activeUsers = new Map<string, Set<string>>();
-
+// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
+  // Join a document room
   socket.on('join-document', async (data: { documentId: string; userId: string; userName: string }) => {
     const { documentId, userId, userName } = data;
     
     socket.join(documentId);
+    console.log(`${userName} joined document ${documentId}`);
     
-    // Track active users
-    if (!activeUsers.has(documentId)) {
-      activeUsers.set(documentId, new Set());
-    }
-    activeUsers.get(documentId)!.add(userId);
-    
+    // Notify others in the room
     socket.to(documentId).emit('user-joined', {
       userId,
       userName,
       socketId: socket.id
     });
     
+    // Send list of users in this document
     const sockets = await io.in(documentId).fetchSockets();
     socket.emit('users-in-document', {
       count: sockets.length,
@@ -205,53 +186,43 @@ io.on('connection', (socket) => {
     });
   });
   
-  // OPTIMIZED: Debounce code changes
-  let codeChangeTimeout: NodeJS.Timeout | null = null;
+  // Handle code changes
   socket.on('code-change', (data: { documentId: string; code: string; userId: string }) => {
-    if (codeChangeTimeout) clearTimeout(codeChangeTimeout);
-    
-    codeChangeTimeout = setTimeout(() => {
-      socket.to(data.documentId).emit('code-update', {
-        documentId: data.documentId,
-        code: data.code,
-        userId: data.userId,
-        timestamp: Date.now()
-      });
-    }, 100); // 100ms debounce
+    const { documentId, code, userId } = data;
+    socket.to(documentId).emit('code-update', {
+      documentId,
+      code,
+      userId,
+      timestamp: Date.now()
+    });
   });
   
+  // Handle cursor position changes
   socket.on('cursor-change', (data: { documentId: string; position: any; userId: string; userName: string }) => {
-    socket.to(data.documentId).emit('cursor-update', {
-      userId: data.userId,
-      userName: data.userName,
-      position: data.position,
+    const { documentId, position, userId, userName } = data;
+    socket.to(documentId).emit('cursor-update', {
+      userId,
+      userName,
+      position,
       socketId: socket.id
     });
   });
   
+  // Handle chat messages
   socket.on('send-chat-message', (data: { projectId: string; message: any }) => {
-    io.to(data.projectId).emit('new-chat-message', data.message);
+    const { projectId, message } = data;
+    io.to(projectId).emit('new-chat-message', message);
   });
   
   socket.on('join-project-chat', (projectId: string) => {
     socket.join(projectId);
+    console.log(`Socket ${socket.id} joined project chat ${projectId}`);
   });
   
+  // Handle disconnect
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     socket.broadcast.emit('user-left', { socketId: socket.id });
-    
-    // Clean up active users
-    activeUsers.forEach((users, documentId) => {
-      users.forEach(userId => {
-        // Remove user if no more sockets
-        io.in(documentId).fetchSockets().then(sockets => {
-          if (sockets.length === 0) {
-            activeUsers.delete(documentId);
-          }
-        });
-      });
-    });
   });
 });
 
@@ -277,30 +248,21 @@ server.listen(PORT, async () => {
 });
 
 // Graceful shutdown
-const shutdown = async () => {
-  console.log('🔄 Shutting down gracefully...');
-  
-  // Close Socket.IO connections
-  io.close();
-  
-  // Disconnect Prisma
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
   await prisma.$disconnect();
-  
-  // Close server
   server.close(() => {
-    console.log('✅ Server closed');
-    process.exit(0);
+    console.log('Process terminated');
   });
-  
-  // Force close after 10 seconds
-  setTimeout(() => {
-    console.error('⚠️  Forcing shutdown');
-    process.exit(1);
-  }, 10000);
-};
+});
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  await prisma.$disconnect();
+  server.close(() => {
+    console.log('Process terminated');
+  });
+});
 
 export default app;
 export { io, prisma };

@@ -89,8 +89,16 @@ const limiter = rateLimit({
   }
 });
 
+const documentLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 saves per minute
+  message: { error: 'Too many document saves' },
+  skip: (req) => process.env.NODE_ENV !== 'production'
+});
+
 if (process.env.NODE_ENV === 'production') {
-app.use('/api/', limiter);
+  app.use('/api/', limiter);
+  app.use('/api/documents/:id/content', documentLimiter); // Special limit for saves
 } else {
   // In development, only limit auth routes
   app.use('/api/auth/', limiter);

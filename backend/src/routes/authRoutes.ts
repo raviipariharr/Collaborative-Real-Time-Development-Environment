@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AuthService } from '../services/authService';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { PrismaClient } from '@prisma/client';
+import jwt from "jsonwebtoken";
 
 const router = Router();
 const prisma = new PrismaClient();

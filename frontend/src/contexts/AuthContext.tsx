@@ -101,32 +101,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
-    const initAuth = async () => {
-      dispatch({ type: 'INIT_START' });
-      
-      if (state.accessToken) {
-        try {
-          const response = await axios.get(`${API_BASE_URL}/auth/me`, {
-            headers: { 'Authorization': `Bearer ${state.accessToken}` }
-          });
-          
-          if (response.data) {
-            dispatch({
-              type: 'LOGIN_SUCCESS',
-              payload: {
-                user: response.data,
-                accessToken: state.accessToken!,
-                refreshToken: state.refreshToken!
-              }
-            });
-          }
-        } catch (error) {
-          dispatch({ type: 'LOGOUT' });
-        }
+    // In initAuth — try refresh token if access token fails
+const initAuth = async () => {
+  dispatch({ type: 'INIT_START' });
+
+  if (state.accessToken) {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+        headers: { 'Authorization': `Bearer ${state.accessToken}` }
+      });
+      if (response.data) {
+        dispatch({ type: 'LOGIN_SUCCESS', payload: {
+          user: response.data,
+          accessToken: state.accessToken!,
+          refreshToken: state.refreshToken!
+        }});
+        dispatch({ type: 'INIT_COMPLETE' });
+        return;
       }
-      
-      dispatch({ type: 'INIT_COMPLETE' });
-    };
+    } catch (error) {
+      // Access token failed — try refresh token instead of logging out
+    }
+  }
+
+  // Try to refresh if we have a refresh token
+  if (state.refreshToken) {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+        refreshToken: state.refreshToken
+      });
+      if (response.data.success) {
+        dispatch({ type: 'LOGIN_SUCCESS', payload: {
+          user: response.data.user,
+          accessToken: response.data.accessToken,
+          refreshToken: response.data.refreshToken
+        }});
+        dispatch({ type: 'INIT_COMPLETE' });
+        return;
+      }
+    } catch (error) {
+      // Refresh also failed — truly log out
+    }
+  }
+
+  dispatch({ type: 'LOGOUT' });
+  dispatch({ type: 'INIT_COMPLETE' });
+};
 
     if (!state.initialized) {
       initAuth();

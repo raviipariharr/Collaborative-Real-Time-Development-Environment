@@ -103,22 +103,16 @@ export class AuthService {
   }
 
   static async saveSession(userId: string, refreshToken: string) {
-    try {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
 
-      await prisma.session.create({
-        data: {
-          userId,
-          token: refreshToken,
-          expiresAt
-        }
-      });
+  // Clean up expired sessions for this user to prevent buildup
+  await prisma.session.deleteMany({
+    where: { userId, expiresAt: { lt: new Date() } }
+  });
 
-      console.log('✅ Session saved for user:', userId);
-    } catch (error) {
-      console.error('Failed to save session:', error);
-      throw new Error('Failed to save session');
-    }
-  }
+  await prisma.session.create({
+    data: { userId, token: refreshToken, expiresAt }
+  });
+}
 }

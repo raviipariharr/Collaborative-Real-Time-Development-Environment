@@ -87,4 +87,37 @@ router.post('/logout', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: 'Refresh token required' });
+
+    // Verify the refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
+    if (decoded.type !== 'refresh') return res.status(401).json({ error: 'Invalid token type' });
+
+    // Check session exists in DB and isn't expired
+    const session = await prisma.session.findFirst({
+      where: { token: refreshToken, userId: decoded.userId, expiresAt: { gt: new Date() } }
+    });
+    if (!session) return res.status(401).json({ error: 'Session expired or invalid' });
+
+    // Generate new tokens
+    const { accessToken: newAccessToken, refreshToken: newRefreshToken } = AuthService.generateTokens(decoded.userId);
+
+    // Replace old session with new one
+    await prisma.session.delete({ where: { id: session.id } });
+    await AuthService.saveSession(decoded.userId, newRefreshToken);
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true, name: true, avatar: true, role: true }
+    });
+
+    return res.json({ success: true, accessToken: newAccessToken, refreshToken: newRefreshToken, user });
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid or expired refresh token' });
+  }
+});
+
 export default router;

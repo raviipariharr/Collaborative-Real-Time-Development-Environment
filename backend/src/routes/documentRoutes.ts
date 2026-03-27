@@ -287,75 +287,39 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    // Check permissions
     const isProjectOwner = document.project.ownerId === userId;
     const member = document.project.members[0];
     const memberRole = member?.role;
 
-    // FIXED LOGIC: Check permissions in the correct order with proper priority
-    let canEdit = false;
+    // ✅ CLEAN PERMISSION LOGIC (OR-based)
+    const hasDocPermission = document.permissions?.some(p => p.canEdit);
+    const hasFolderPermission = document.folder?.permissions?.some(p => p.canEdit);
 
-    console.log(`\n🔍 Checking edit permission for document ${id}:`);
-    console.log(`   - User: ${userId}`);
-    console.log(`   - Is Owner: ${isProjectOwner}`);
-    console.log(`   - Member Role: ${memberRole}`);
-    console.log(`   - Document Permissions: ${JSON.stringify(document.permissions)}`);
-    console.log(`   - In Folder: ${document.folderId}`);
+    const canEdit =
+      isProjectOwner ||
+      memberRole === 'ADMIN' ||
+      hasDocPermission ||
+      hasFolderPermission;
 
-    // 1. Owner and Admin ALWAYS have edit access
-    if (isProjectOwner || memberRole === 'ADMIN') {
-      console.log(`✅ Access granted: Owner or Admin`);
-      canEdit = true;
-    } 
-    // 2. Check document-level permission FIRST (highest priority for specific access)
-    else if (document.permissions.length > 0 && document.permissions[0].canEdit) {
-      console.log(`✅ Access granted: Explicit document permission (canEdit: ${document.permissions[0].canEdit})`);
-      canEdit = true;
-    }
-    // 3. If document is in a folder, check folder permission
-    else if (document.folderId && document.folder) {
-      const folderPerm = document.folder.permissions[0];
-      console.log(`   - Folder Permission: ${JSON.stringify(folderPerm)}`);
-      if (folderPerm?.canEdit) {
-        console.log(`✅ Access granted: Folder permission`);
-        canEdit = true;
-      } else {
-        console.log(`❌ Access denied: No folder permission`);
-      }
-    }
-    // 4. For EDITOR role: Allow editing documents in folders they have access to
-    // But ROOT files (no folder) require explicit permission
-    else if (memberRole === 'EDITOR') {
-      if (document.folderId) {
-        // Editor trying to edit a file in a folder without explicit permission
-        console.log(`❌ Access denied: EDITOR lacks folder permission for ${document.folderId}`);
-        canEdit = false;
-      } else {
-        // Editor trying to edit a root file without explicit permission
-        console.log(`❌ Access denied: EDITOR lacks explicit permission for root file ${id}`);
-        canEdit = false;
-      }
-    } else {
-      console.log(`❌ Access denied: No applicable permissions found`);
-    }
+    // Debug logs (optional but useful)
+    console.log(`\n🔍 Permission Check:`);
+    console.log(`   User: ${userId}`);
+    console.log(`   Owner: ${isProjectOwner}`);
+    console.log(`   Role: ${memberRole}`);
+    console.log(`   DocPerm: ${hasDocPermission}`);
+    console.log(`   FolderPerm: ${hasFolderPermission}`);
+    console.log(`   Final canEdit: ${canEdit}`);
 
     if (!canEdit) {
-      console.log(`❌ Permission denied for user ${userId} on document ${id}`);
-      console.log(`   - Role: ${memberRole}`);
-      console.log(`   - Document permissions: ${document.permissions.length}`);
-      console.log(`   - Folder permissions: ${document.folder?.permissions.length || 0}`);
-      
       return res.status(403).json({ 
         error: 'You do not have permission to edit this document',
         reason: document.folderId 
-          ? 'No folder access granted' 
+          ? 'No access via document or folder permission' 
           : 'Root file requires explicit permission',
         canView: true,
         canEdit: false
       });
     }
-
-    console.log(`✅ Permission granted for user ${userId} on document ${id}`);
 
     const updated = await prisma.document.update({
       where: { id },
@@ -366,6 +330,7 @@ router.put('/:id/content', async (req: AuthRequest, res) => {
     });
     
     res.json(updated);
+
   } catch (error) {
     console.error('Error saving content:', error);
     res.status(500).json({ error: 'Failed to save content' });

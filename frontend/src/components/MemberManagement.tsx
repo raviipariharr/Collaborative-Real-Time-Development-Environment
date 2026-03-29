@@ -22,7 +22,7 @@ interface Project {
     id: string;
     name: string;
     email: string;
-    avatar?:string;
+    avatar?: string;
   };
 }
 
@@ -53,7 +53,11 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
     try {
       setLoading(true);
       const data = await apiService.getProjectMembers(project.id);
-      setMembers(data);
+      // ✅ FIX: Filter out the owner from the members list entirely.
+      // The owner is shown separately in the Owner Section and should never
+      // appear in the members list with role/remove controls.
+      const nonOwnerMembers = data.filter((m: ProjectMember) => m.userId !== project.owner.id);
+      setMembers(nonOwnerMembers);
     } catch (error) {
       console.error('Failed to load members:', error);
     } finally {
@@ -316,6 +320,20 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                   {project.owner.email}
                 </div>
               </div>
+              {/* ✅ FIX: Owner always shows a static locked badge — never a dropdown */}
+              <span style={{
+                padding: '0.5rem 0.75rem',
+                border: '2px solid rgba(255,215,0,0.6)',
+                borderRadius: '8px',
+                background: 'rgba(255,215,0,0.2)',
+                color: '#b8860b',
+                fontSize: '0.85rem',
+                fontWeight: '600',
+                minWidth: '100px',
+                textAlign: 'center'
+              }}>
+                👑 Owner
+              </span>
             </div>
           </div>
 
@@ -425,7 +443,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                       </div>
                     </div>
 
-                    {/* Role Selector */}
+                    {/* Role & Actions */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
                       {isOwner ? (
                         <select
@@ -487,7 +505,7 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
                         </button>
                       )}
 
-                      {/* Remove Button */}
+                      {/* ✅ FIX: Remove button — owner's own entry is already excluded from this list */}
                       {isOwner && (
                         <button
                           onClick={() => handleRemoveMember(member.id, member.user.name)}
@@ -548,66 +566,22 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
             borderRadius: '12px',
             border: '1px solid #e0e0e0'
           }}>
-            <h3 style={{
-              margin: '0 0 1rem 0',
-              fontSize: '0.95rem',
-              color: '#666',
-              fontWeight: '600'
-            }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.95rem', color: '#666', fontWeight: '600' }}>
               Role Permissions
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem' }}>
-                <span style={{
-                  padding: '0.3rem 0.6rem',
-                  background: 'rgba(255,215,0,0.2)',
-                  border: '1px solid #ffd700',
-                  borderRadius: '6px',
-                  color: '#b8860b',
-                  fontWeight: '600',
-                  minWidth: '70px',
-                  textAlign: 'center'
-                }}>
-                  ADMIN
-                </span>
-                <span style={{ color: '#666' }}>
-                  Full access: Create, edit, delete files/folders, manage members
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem' }}>
-                <span style={{
-                  padding: '0.3rem 0.6rem',
-                  background: 'rgba(76,175,80,0.2)',
-                  border: '1px solid #4caf50',
-                  borderRadius: '6px',
-                  color: '#2e7d32',
-                  fontWeight: '600',
-                  minWidth: '70px',
-                  textAlign: 'center'
-                }}>
-                  EDITOR
-                </span>
-                <span style={{ color: '#666' }}>
-                  Can create, edit, and delete files/folders
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem' }}>
-                <span style={{
-                  padding: '0.3rem 0.6rem',
-                  background: 'rgba(158,158,158,0.2)',
-                  border: '1px solid #9e9e9e',
-                  borderRadius: '6px',
-                  color: '#616161',
-                  fontWeight: '600',
-                  minWidth: '70px',
-                  textAlign: 'center'
-                }}>
-                  VIEWER
-                </span>
-                <span style={{ color: '#666' }}>
-                  Read-only access: Can view files but cannot edit
-                </span>
-              </div>
+              {[
+                { role: 'ADMIN', bg: 'rgba(255,215,0,0.2)', border: '#ffd700', text: '#b8860b', desc: 'Full access: Create, edit, delete files/folders, manage members' },
+                { role: 'EDITOR', bg: 'rgba(76,175,80,0.2)', border: '#4caf50', text: '#2e7d32', desc: 'Can create, edit, and delete files/folders' },
+                { role: 'VIEWER', bg: 'rgba(158,158,158,0.2)', border: '#9e9e9e', text: '#616161', desc: 'Read-only access: Can view files but cannot edit' },
+              ].map(({ role, bg, border, text, desc }) => (
+                <div key={role} style={{ display: 'flex', gap: '0.75rem', fontSize: '0.85rem' }}>
+                  <span style={{ padding: '0.3rem 0.6rem', background: bg, border: `1px solid ${border}`, borderRadius: '6px', color: text, fontWeight: '600', minWidth: '70px', textAlign: 'center' }}>
+                    {role}
+                  </span>
+                  <span style={{ color: '#666' }}>{desc}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -615,126 +589,44 @@ const MemberManagement: React.FC<MemberManagementProps> = ({ project, currentUse
 
       {/* Invite Modal */}
       {showInviteModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2001
-        }}
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2001 }}
           onClick={() => setShowInviteModal(false)}
         >
-          <div style={{
-            background: 'white',
-            padding: '2rem',
-            borderRadius: '16px',
-            maxWidth: '500px',
-            width: '90%',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-          }}
+          <div style={{ background: 'white', padding: '2rem', borderRadius: '16px', maxWidth: '500px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1.3rem' }}>Invite Team Member</h3>
             <form onSubmit={handleInvite}>
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.9rem' }}>
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="colleague@example.com"
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    fontSize: '1rem',
-                    boxSizing: 'border-box',
-                    transition: 'border 0.2s'
-                  }}
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.9rem' }}>Email Address *</label>
+                <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="colleague@example.com" required
+                  style={{ width: '100%', padding: '0.75rem', border: '2px solid #e0e0e0', borderRadius: '8px', fontSize: '1rem', boxSizing: 'border-box' }}
                   onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'}
                   onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
                 />
               </div>
-
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.9rem' }}>
-                  Role *
-                </label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as any)}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    fontSize: '1rem',
-                    cursor: 'pointer',
-                    boxSizing: 'border-box'
-                  }}
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.9rem' }}>Role *</label>
+                <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as any)}
+                  style={{ width: '100%', padding: '0.75rem', border: '2px solid #e0e0e0', borderRadius: '8px', fontSize: '1rem', cursor: 'pointer', boxSizing: 'border-box' }}
                 >
                   <option value="ADMIN">Admin - Full access</option>
                   <option value="EDITOR">Editor - Can edit files</option>
                   <option value="VIEWER">Viewer - Read-only</option>
                 </select>
               </div>
-
               {inviteError && (
-                <div style={{
-                  background: '#fee',
-                  color: '#c33',
-                  padding: '0.75rem',
-                  borderRadius: '8px',
-                  marginBottom: '1rem',
-                  fontSize: '0.9rem'
-                }}>
+                <div style={{ background: '#fee', color: '#c33', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem' }}>
                   {inviteError}
                 </div>
               )}
-
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowInviteModal(false);
-                    setInviteEmail('');
-                    setInviteError('');
-                  }}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    background: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: '500'
-                  }}
-                >
+                <button type="button" onClick={() => { setShowInviteModal(false); setInviteEmail(''); setInviteError(''); }}
+                  style={{ padding: '0.75rem 1.5rem', border: '2px solid #e0e0e0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '500' }}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={inviteLoading}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    background: inviteLoading ? '#ccc' : '#667eea',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: inviteLoading ? 'not-allowed' : 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: '500'
-                  }}
-                >
+                <button type="submit" disabled={inviteLoading}
+                  style={{ padding: '0.75rem 1.5rem', background: inviteLoading ? '#ccc' : '#667eea', color: 'white', border: 'none', borderRadius: '8px', cursor: inviteLoading ? 'not-allowed' : 'pointer', fontSize: '0.9rem', fontWeight: '500' }}>
                   {inviteLoading ? 'Sending...' : 'Send Invitation'}
                 </button>
               </div>

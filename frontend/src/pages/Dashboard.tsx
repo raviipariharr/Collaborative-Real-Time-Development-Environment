@@ -10,7 +10,12 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
-  owner: { name: string };
+  owner: {
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
   _count: { documents: number; members: number };
   updatedAt: string;
 }

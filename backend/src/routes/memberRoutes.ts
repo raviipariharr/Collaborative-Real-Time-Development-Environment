@@ -55,7 +55,6 @@ router.put('/:memberId/role', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid role' });
     }
 
-    // Get the member first to find the project
     const member = await prisma.projectMember.findUnique({
       where: { id: memberId },
       include: { project: true }
@@ -68,6 +67,11 @@ router.put('/:memberId/role', async (req: AuthRequest, res) => {
     // Only project owner can change roles
     if (member.project.ownerId !== userId) {
       return res.status(403).json({ error: 'Only project owner can change roles' });
+    }
+
+    // FIX: Prevent owner from changing their own role
+    if (member.userId === member.project.ownerId) {
+      return res.status(403).json({ error: 'The project owner role cannot be changed' });
     }
 
     const updated = await prisma.projectMember.update({
@@ -104,6 +108,11 @@ router.delete('/:memberId', async (req: AuthRequest, res) => {
 
     if (member.project.ownerId !== userId) {
       return res.status(403).json({ error: 'Only project owner can remove members' });
+    }
+
+    // FIX: Prevent owner from removing themselves
+    if (member.userId === member.project.ownerId) {
+      return res.status(403).json({ error: 'The project owner cannot be removed from the project' });
     }
 
     await prisma.projectMember.delete({ where: { id: memberId } });

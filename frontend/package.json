@@ -27,7 +27,6 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
-  
   },
   "eslintConfig": {
     "extends": [
@@ -48,8 +47,8 @@
     ]
   },
   "devDependencies": {
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.1",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
     "@types/socket.io-client": "^1.4.36"
   }
 }

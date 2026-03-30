@@ -10,12 +10,7 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
-  owner: {
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  };
+  owner: { id: string; name: string }; // Added id here
   _count: { documents: number; members: number };
   updatedAt: string;
 }
@@ -44,6 +39,10 @@ const Dashboard: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const { theme, toggleTheme } = useTheme();
+
+  // Helper: is the current user the owner of a given project?
+  const isProjectOwner = (project: Project) =>
+    state.user?.id === project.owner.id;
 
   const openEditModal = (project: Project, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -298,123 +297,125 @@ const Dashboard: React.FC = () => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
             gap: 'clamp(1rem, 2vw, 1.5rem)'
           }}>
-            {projects.map(project => (
-              <div key={project.id} style={{
-                background: theme === 'dark' ? '#2d2d2d' : 'white',
-                color: theme === 'dark' ? 'white' : '#333',
-                padding: 'clamp(1rem, 2vw, 1.5rem)',
-                borderRadius: '12px',
-                boxShadow: theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.1)',
-                cursor: 'pointer',
-                transition: 'transform 0.2s',
-              }}
-                onClick={() => navigate(`/editor/${project.id}`)}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-              >
-                <h3 style={{
-                  marginBottom: '0.5rem',
-                  fontSize: 'clamp(1rem, 2vw, 1.2rem)',
-                  wordBreak: 'break-word'
-                }}>{project.name}</h3>
-                <p style={{
-                  color: '#666',
-                  fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)',
-                  marginBottom: '1rem',
-                  wordBreak: 'break-word'
-                }}>
-                  {project.description || 'No description'}
-                </p>
-                <div style={{
-                  fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)',
-                  color: '#999',
-                  marginBottom: '1rem'
-                }}>
-                  <div>{project._count.documents} files • {project._count.members} members</div>
-                  <div style={{ wordBreak: 'break-word' }}>Owner: {project.owner.name}</div>
-                </div>
-
-                {/* Action Buttons - Responsive */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: window.innerWidth < 480 ? '1fr 1fr' : '1fr 1fr auto',
-                  gap: '0.5rem'
+            {projects.map(project => {
+              const owned = isProjectOwner(project);
+              return (
+                <div key={project.id} style={{
+                  background: theme === 'dark' ? '#2d2d2d' : 'white',
+                  color: theme === 'dark' ? 'white' : '#333',
+                  padding: 'clamp(1rem, 2vw, 1.5rem)',
+                  borderRadius: '12px',
+                  boxShadow: theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.1)',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s',
                 }}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={() => navigate(`/editor/${project.id}`)}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                 >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditModal(project, e);
-                    }}
-                    style={{
-                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
-                      background: '#4caf50',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openInviteModal(project.id, e);
-                    }}
-                    style={{
-                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
-                      background: '#667eea',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
-                    }}
-                  >
-                    Invite
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation(); // Extra safety
-                      openMemberManagement(project, e);
-                    }}
-                    style={{
-                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.6rem, 2vw, 0.75rem)',
-                      background: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)',
+                  <h3 style={{
+                    marginBottom: '0.5rem',
+                    fontSize: 'clamp(1rem, 2vw, 1.2rem)',
+                    wordBreak: 'break-word'
+                  }}>{project.name}</h3>
+                  <p style={{
+                    color: '#666',
+                    fontSize: 'clamp(0.85rem, 1.5vw, 0.9rem)',
+                    marginBottom: '1rem',
+                    wordBreak: 'break-word'
+                  }}>
+                    {project.description || 'No description'}
+                  </p>
+                  <div style={{
+                    fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)',
+                    color: '#999',
+                    marginBottom: '1rem'
+                  }}>
+                    <div>{project._count.documents} files • {project._count.members} members</div>
+                    <div style={{ wordBreak: 'break-word' }}>Owner: {project.owner.name}</div>
+                  </div>
 
-                    }}
+                  {/* Action Buttons */}
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '0.5rem'
+                  }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    Members
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation(); 
-                      confirmDelete(project.id, e);
-                    }}
-                    style={{
-                      padding: 'clamp(0.4rem, 1.5vw, 0.5rem)',
-                      background: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)',
-                      gridColumn: window.innerWidth < 480 ? 'span 2' : 'auto'
-                    }}
-                  >
-                    Delete
-                  </button>
+                    {/* Edit — owner only */}
+                    {owned && (
+                      <button
+                        onClick={(e) => openEditModal(project, e)}
+                        style={{
+                          padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
+                          background: '#4caf50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
+                        }}
+                      >
+                        Edit
+                      </button>
+                    )}
+
+                    {/* Invite — owner only */}
+                    {owned && (
+                      <button
+                        onClick={(e) => openInviteModal(project.id, e)}
+                        style={{
+                          padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
+                          background: '#667eea',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
+                        }}
+                      >
+                        Invite
+                      </button>
+                    )}
+
+                    {/* Members — visible to everyone */}
+                    <button
+                      onClick={(e) => openMemberManagement(project, e)}
+                      style={{
+                        padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
+                        background: '#9c27b0',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
+                      }}
+                    >
+                      Members
+                    </button>
+
+                    {/* Delete — owner only */}
+                    {owned && (
+                      <button
+                        onClick={(e) => confirmDelete(project.id, e)}
+                        style={{
+                          padding: 'clamp(0.4rem, 1.5vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
+                          background: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: 'clamp(0.8rem, 1.5vw, 0.85rem)'
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
@@ -519,8 +520,6 @@ const Dashboard: React.FC = () => {
               </form>
             </div>
           )}
-
-          {/* Other modals similar structure... */}
         </div>
       )}
 

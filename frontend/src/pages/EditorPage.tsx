@@ -103,8 +103,8 @@ const EditorPage: React.FC = () => {
 
     // Check if there's a document-level permission (highest priority)
     const docPermissions = documentPermissions.get(selectedDoc.id);
-    if (docPermissions ==true ) {
-      return true;
+    if (docPermissions !== undefined) {
+      return docPermissions;
     }
 
     // Check folder-level permission
@@ -187,25 +187,26 @@ const EditorPage: React.FC = () => {
     }
   }, [projectId, selectedDoc]);
 
-  const loadDocumentPermissions = useCallback(async () => {
-    if (!selectedDoc || !state.user) return;
-
+  // FIX: check ALL documents at once so switching files shows correct state
+  // immediately, and permissions granted mid-session are picked up on refresh.
+  const loadAllDocumentPermissions = useCallback(async (docs: Document[]) => {
+    if (!state.user || docs.length === 0) return;
     try {
-      const perm = await apiService.checkDocumentEditPermission(selectedDoc.id);
+      const results = await Promise.allSettled(
+        docs.map(doc => apiService.checkDocumentEditPermission(doc.id))
+      );
       setDocumentPermissions(prev => {
         const newMap = new Map(prev);
-        newMap.set(selectedDoc.id, perm.canEdit);
+        docs.forEach((doc, i) => {
+          const result = results[i];
+          newMap.set(doc.id, result.status === 'fulfilled' ? result.value.canEdit : false);
+        });
         return newMap;
       });
     } catch (error) {
-      console.error(`Failed to check permission for document ${selectedDoc.id}:`, error);
-      setDocumentPermissions(prev => {
-        const newMap = new Map(prev);
-        newMap.set(selectedDoc.id, false);
-        return newMap;
-      });
+      console.error('Failed to load document permissions:', error);
     }
-  }, [selectedDoc, state.user]);
+  }, [state.user]);
 
   const saveContent = useCallback(async (docId: string, content: string) => {
     // Don't save if already saving or content hasn't changed
@@ -271,11 +272,22 @@ const EditorPage: React.FC = () => {
     }
   }, [projectId, loadProject, loadDocuments, loadFolders, loadProjectMembers]);
 
+  // FIX: run when the documents list loads/changes, not per-selectedDoc switch
   useEffect(() => {
-    if (selectedDoc) {
-      loadDocumentPermissions();
+    if (documents.length > 0) {
+      loadAllDocumentPermissions(documents);
     }
-  }, [selectedDoc, loadDocumentPermissions]);
+  }, [documents, loadAllDocumentPermissions]);
+
+  // FIX: poll every 30s so permissions granted by an admin appear without page reload
+  useEffect(() => {
+    if (!projectId || !state.user) return;
+    const interval = setInterval(() => {
+      loadFolders();
+      if (documents.length > 0) loadAllDocumentPermissions(documents);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [projectId, state.user, documents, loadFolders, loadAllDocumentPermissions]);
 
   // WebSocket connection
   useEffect(() => {

@@ -203,12 +203,15 @@ const FileTree: React.FC<FileTreeProps> = ({
   // ── Colours ─────────────────────────────────────────────────────────────────
 
   const colors = {
-    hover: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-    text: theme === 'dark' ? '#d4d4d4' : '#333',
-    subtext: theme === 'dark' ? '#888' : '#999',
+    // Sidebar background is always dark (#252526 in light, #1e1e1e in dark),
+    // so tree text must always be light — only the shade differs.
+    hover: 'rgba(255,255,255,0.08)',
+    text: theme === 'dark' ? '#d4d4d4' : '#cccccc',
+    subtext: theme === 'dark' ? '#777' : '#888',
     menuBg: theme === 'dark' ? '#2d2d2d' : '#ffffff',
     menuBorder: theme === 'dark' ? '#444' : '#e0e0e0',
     menuHover: theme === 'dark' ? 'rgba(255,255,255,0.08)' : '#f5f5f5',
+    menuText: theme === 'dark' ? '#d4d4d4' : '#333',
     inputBg: theme === 'dark' ? '#1e1e1e' : '#ffffff',
     inputBorder: theme === 'dark' ? '#555' : '#bbb',
     inputFocus: '#667eea',
@@ -427,7 +430,7 @@ const FileTree: React.FC<FileTreeProps> = ({
         border: 'none',
         textAlign: 'left',
         cursor: 'pointer',
-        color: danger ? '#f44336' : colors.text,
+        color: danger ? '#f44336' : colors.menuText,
         fontSize: '0.88rem',
         display: 'flex',
         alignItems: 'center',
